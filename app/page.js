@@ -2225,6 +2225,7 @@ function PageInner() {
           const activeSignals = signals.filter((s) => s.action === "like" || s.action === "dislike");
           const hasAffinity = activeSignals.length >= 2;
           const displayList = hasAffinity ? applyAffinity(list, affinities) : list;
+          const heroPhoto = ((displayList.find((x) => x && x.photo)) || {}).photo || null;
           const likeCount = Object.keys(liked).length;
           const h = new Date().getHours();
           const part = h < 11 ? "this morning" : h < 15 ? "for lunch" : h < 17 ? "this afternoon" : h < 22 ? "tonight" : "right now";
@@ -2238,7 +2239,7 @@ function PageInner() {
               {/* LEFT column on desktop: intent chips + hooks + feed */}
               <div style={{ flex: 1, minWidth: 0 }}>
               {!isDesktop && (
-              <div style={{ background: C.adim, border: `1px solid ${C.accent}`, borderRadius: 16, padding: 16, marginBottom: 14 }}>
+              <div style={{ position: "relative", overflow: "hidden", border: `1px solid ${C.accent}`, borderRadius: 16, padding: 16, marginBottom: 14, ...(heroPhoto ? { backgroundImage: `linear-gradient(180deg, rgba(13,17,23,.58) 0%, rgba(13,17,23,.80) 60%, rgba(13,17,23,.92) 100%), url(${heroPhoto})`, backgroundSize: "cover", backgroundPosition: "center" } : { background: C.adim }) }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: weather ? 11 : 6 }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 11, fontWeight: 800, color: C.accent, letterSpacing: "0.6px", textTransform: "uppercase" }}>You are exploring</div>
@@ -2331,7 +2332,7 @@ function PageInner() {
               </div>
               {isDesktop && (
                 <div style={{ width: 340, flexShrink: 0, position: "sticky", top: 12 }}>
-                  <div style={{ background: C.adim, border: `1px solid ${C.accent}`, borderRadius: 16, padding: 16, marginBottom: 14 }}>
+                  <div style={{ position: "relative", overflow: "hidden", border: `1px solid ${C.accent}`, borderRadius: 16, padding: 16, marginBottom: 14, ...(heroPhoto ? { backgroundImage: `linear-gradient(180deg, rgba(13,17,23,.58) 0%, rgba(13,17,23,.80) 60%, rgba(13,17,23,.92) 100%), url(${heroPhoto})`, backgroundSize: "cover", backgroundPosition: "center" } : { background: C.adim }) }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: weather ? 10 : 6 }}>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 10, fontWeight: 800, color: C.accent, letterSpacing: "0.6px", textTransform: "uppercase" }}>You are exploring</div>
@@ -2543,7 +2544,7 @@ function PageInner() {
               <button onClick={() => setActiveList(null)} style={{ background: "none", border: "none", color: C.accent, fontSize: 22, cursor: "pointer" }}>‹</button>
               <div style={{ flex: 1, fontSize: 17, fontWeight: 700, color: C.text }}>{lists[activeList].emoji} {lists[activeList].name}</div>
               {lists[activeList].places.length > 0 && (
-                <button onClick={() => shareLink(`Wayfind list: ${lists[activeList].name}`, originUrl("/?list=" + encodeList(lists[activeList].places)), () => showToast("Link copied"), `A few places I think we should check out. Found them on Wayfind`)} style={{ background: C.adim, border: `1px solid ${C.accent}`, color: C.accent, fontSize: 13, fontWeight: 700, padding: "7px 12px", borderRadius: 20, cursor: "pointer" }}>Share ↗</button>
+                <button onClick={() => { const lst = lists[activeList]; shareLink(`Wayfind list: ${lst.name}`, originUrl(`/s/${encodeList(lst.places)}?t=${encodeURIComponent(lst.name)}&loc=${encodeURIComponent(locName || "")}&n=${(lst.places || []).length}`), () => showToast("Link copied"), `A few places I think we should check out. Found them on Wayfind`); }} style={{ background: C.adim, border: `1px solid ${C.accent}`, color: C.accent, fontSize: 13, fontWeight: 700, padding: "7px 12px", borderRadius: 20, cursor: "pointer" }}>Share ↗</button>
               )}
               {activeList !== "favorites" && (
                 <button onClick={() => deleteList(activeList)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.red, fontSize: 16, width: 34, height: 34, borderRadius: 10, cursor: "pointer" }}>🗑</button>
@@ -3270,7 +3271,7 @@ function PageInner() {
                     {isLiked ? "❤️ Saved" : "🤍 Save this list"}
                   </button>
                   <button
-                    onClick={() => shareLink(hookDetail.themeTitle || hookDetail.hook || "My Wayfind picks", originUrl("/?list=" + encodeList(themePlaces)), () => showToast("Link copied"), `${hookDetail.themeTitle || "A few spots worth your time"} — my picks on Wayfind`)}
+                    onClick={() => { const ttl = hookDetail.themeTitle || hookDetail.hook || "My Wayfind picks"; shareLink(ttl, originUrl(`/s/${encodeList(themePlaces)}?t=${encodeURIComponent(ttl)}&loc=${encodeURIComponent(locName || "")}&n=${themePlaces.length}`), () => showToast("Link copied"), `${ttl} — my picks on Wayfind`); }}
                     style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px 0", borderRadius: 14, border: "none", background: acc, color: "#0D1117", fontSize: 14, fontWeight: 800, cursor: "pointer" }}
                   >
                     ↗ Share
