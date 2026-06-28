@@ -4,6 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
+const BUILD = "v2.4";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -799,7 +800,7 @@ function renderHookText(text, highlightWord, color) {
 // Each tile is a full photo background with dark overlay + bold editorial
 // typography. The hook's accent word glows in the tile's color. Matches the
 // visual style of premium discovery apps.
-function HooksBanner({ hooks, likedIds, totalLiked, onOpen, onLike, allPlaces }) {
+function HooksBanner({ hooks, likedIds, totalLiked, onOpen, onLike, allPlaces, isDesktop }) {
   if (!hooks || hooks.length === 0) return null;
   const liked = likedIds || new Set();
   // Build a place lookup so each tile can show its place's real photo
@@ -814,7 +815,7 @@ function HooksBanner({ hooks, likedIds, totalLiked, onOpen, onLike, allPlaces })
           <span>{totalLiked} tip{totalLiked === 1 ? "" : "s"} saved</span>
         </div>
       )}
-      <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingRight: 12, paddingBottom: 4, WebkitOverflowScrolling: "touch", scrollSnapType: "x mandatory", msOverflowStyle: "none", scrollbarWidth: "none" }}>
+      <div style={{ display: "flex", flexWrap: isDesktop ? "wrap" : "nowrap", gap: 12, overflowX: isDesktop ? "visible" : "auto", paddingRight: 12, paddingBottom: 4, WebkitOverflowScrolling: "touch", scrollSnapType: isDesktop ? "none" : "x mandatory", msOverflowStyle: "none", scrollbarWidth: "none" }}>
         {hooks.map((h) => {
           const isLiked = liked.has(h.id);
           const acc = h.accent || C.accent;
@@ -876,6 +877,39 @@ function HooksBanner({ hooks, likedIds, totalLiked, onOpen, onLike, allPlaces })
       </div>
     </div>
   );
+}
+
+// Compute the list of real places a hook represents (same logic the detail
+// sheet uses), so a card's heart can save the full list to Favorites.
+function placesForHook(hook, allSrc) {
+  const theme = (hook && hook.theme) || "best";
+  const primaryId = hook && hook.placeId;
+  const byScore = [...allSrc].sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0));
+  let out = [];
+  if (theme === "top5" || theme === "best") out = byScore.slice(0, 5);
+  else if (theme === "gem") {
+    out = allSrc.filter((p) => p.rating >= 4.4 && p.reviews >= 15 && p.reviews < 450).sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 5);
+    const pri = allSrc.find((x) => x.id === primaryId);
+    if (pri && !out.find((p) => p.id === pri.id)) out = [pri, ...out].slice(0, 5);
+  } else if (theme === "skip") out = allSrc.filter((p) => p.rating && p.rating < 3.9 && p.reviews >= 50).sort((a, b) => (a.rating || 5) - (b.rating || 5)).slice(0, 4);
+  else if (theme === "value") out = allSrc.filter((p) => p.rating >= 4.2 && (p.priceNum === 1 || p.priceNum === 0)).sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 5);
+  else if (theme === "open") out = allSrc.filter((p) => p.openNow === true).sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 5);
+  else if (theme === "popular" || theme === "overrated") out = [...allSrc].sort((a, b) => (b.reviews || 0) - (a.reviews || 0)).slice(0, 5);
+  else if (theme === "drive") out = allSrc.filter((p) => p.distMi != null && p.distMi > 12 && p.rating >= 4.4).sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 3);
+  else if (theme === "itinerary") {
+    const food = allSrc.filter((p) => (primaryCategory(p) || "") === "Food").sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 2);
+    const night = allSrc.filter((p) => (primaryCategory(p) || "") === "Nightlife").sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 2);
+    out = [...food, ...night];
+  } else if (theme === "latenight") out = allSrc.filter((p) => p.openNow === true).sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 5);
+  else {
+    const pri = allSrc.find((x) => x.id === primaryId);
+    out = pri ? [pri, ...byScore.filter((p) => p.id !== pri.id).slice(0, 4)] : byScore.slice(0, 5);
+  }
+  if (out.length === 0 && primaryId) {
+    const pri = allSrc.find((x) => x.id === primaryId);
+    if (pri) out = [pri];
+  }
+  return out;
 }
 
 // ─── Single full-width editorial hook card, for weaving into the feed ─────────
@@ -1088,6 +1122,8 @@ function PageInner() {
   const [authOpen, setAuthOpen] = useState(false);
   const [authEmail, setAuthEmail] = useState("");
   const [authSending, setAuthSending] = useState(false);
+  const [authPassword, setAuthPassword] = useState("");
+  const [authMode, setAuthMode] = useState("signin"); // signin | signup
 
   // Restore session on load and listen for sign-in / sign-out.
   useEffect(() => {
@@ -1108,9 +1144,34 @@ function PageInner() {
     setAuthSending(true);
     try {
       const { error } = await supabase.auth.signInWithOtp({ email: authEmail.trim(), options: { emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined } });
-      if (error) { showToast("Could not send link"); }
+      if (error) { showToast(error.message ? `Sign-in error: ${error.message}` : "Could not send link"); }
       else { showToast("Check your email for a sign-in link"); setAuthOpen(false); setAuthEmail(""); }
-    } catch { showToast("Could not send link"); }
+    } catch (e) { showToast(e && e.message ? `Sign-in error: ${e.message}` : "Could not send link"); }
+    setAuthSending(false);
+  }
+  // One-tap social sign-in. No email, no rate limits. Needs the provider enabled
+  // in Supabase. Redirects out to Google/Apple and back to the app.
+  async function signInWithProvider(provider) {
+    if (!supabase) return;
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: typeof window !== "undefined" ? window.location.origin : undefined } });
+      if (error) showToast(`Sign-in error: ${error.message}`);
+    } catch (e) { showToast(e && e.message ? `Sign-in error: ${e.message}` : "Could not sign in"); }
+  }
+  // Email + password. Works with no email sending at all if "Confirm email" is
+  // turned off in Supabase. Sign in for existing accounts, sign up for new ones.
+  async function passwordAuth() {
+    if (!supabase || !authEmail || !authPassword) return;
+    setAuthSending(true);
+    try {
+      const creds = { email: authEmail.trim(), password: authPassword };
+      const res = authMode === "signup"
+        ? await supabase.auth.signUp(creds)
+        : await supabase.auth.signInWithPassword(creds);
+      if (res.error) { showToast(`Sign-in error: ${res.error.message}`); }
+      else if (res.data && res.data.session) { showToast("Signed in"); setAuthOpen(false); setAuthEmail(""); setAuthPassword(""); }
+      else { showToast("Account created. Check your email to confirm, then sign in."); }
+    } catch (e) { showToast(e && e.message ? `Sign-in error: ${e.message}` : "Could not sign in"); }
     setAuthSending(false);
   }
 
@@ -2092,6 +2153,15 @@ function PageInner() {
       showToast("❤️ Saved to your lists");
     }
   }
+  // Heart on a recommendation card: like it AND save the full list to Favorites.
+  function onHookHeart(hookId) {
+    toggleHookLike(hookId);
+    const h = (hookCards || []).find((x) => x.id === hookId);
+    if (!h) return;
+    const allSrc = [...(suggested || []), ...places].filter(Boolean);
+    const pls = placesForHook(h, allSrc);
+    if (pls.length) saveHookList(h, pls);
+  }
   const isSaved = (id) => Object.values(lists).some((l) => l.places.some((p) => p.id === id));
 
   function createList() {
@@ -2268,7 +2338,7 @@ function PageInner() {
         <PlaceCard key={p.id} p={p} rank={i + 1} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => quickSaveFavorite(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} />
       ))}
       {view.length > 3 && hookCards.length > 0 && (
-        <HooksBanner hooks={hookCards} likedIds={hookLikes} totalLiked={hookLikes.size} onOpen={openHook} onLike={toggleHookLike} allPlaces={[...(suggested || []), ...places].filter(Boolean)} />
+        <HooksBanner hooks={hookCards} likedIds={hookLikes} totalLiked={hookLikes.size} onOpen={openHook} onLike={onHookHeart} allPlaces={[...(suggested || []), ...places].filter(Boolean)} isDesktop={isDesktop} />
       )}
       {view.slice(3).map((p, i) => (
         <PlaceCard key={p.id} p={p} rank={i + 4} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => quickSaveFavorite(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} />
@@ -2286,6 +2356,7 @@ function PageInner() {
           <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
             <img src="/wordmark.png" alt="wayfind" onClick={openSuggested} style={{ height: 30, width: "auto", display: "block", cursor: "pointer" }} />
             {locName && <span style={{ fontSize: 13, fontWeight: 400, color: C.muted, marginLeft: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>· {locName}</span>}
+            <span style={{ fontSize: 9, fontWeight: 600, color: C.muted, opacity: 0.5, marginLeft: 4 }}>{BUILD}</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
             {supabase && (user ? (
@@ -2506,7 +2577,7 @@ function PageInner() {
                 <PlaceCard key={p.id} p={p} rank={i + 1} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => quickSaveFavorite(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} />
               ))}
               {hookCards.length > 0 && (
-                <HooksBanner hooks={hookCards.slice(0, 3)} likedIds={hookLikes} totalLiked={hookLikes.size} onOpen={openHook} onLike={toggleHookLike} allPlaces={[...(suggested || []), ...places].filter(Boolean)} />
+                <HooksBanner hooks={hookCards.slice(0, 3)} likedIds={hookLikes} totalLiked={hookLikes.size} onOpen={openHook} onLike={onHookHeart} allPlaces={[...(suggested || []), ...places].filter(Boolean)} isDesktop={isDesktop} />
               )}
               {!suggestedLoading && suggested !== null && (() => {
                 const rest = displayList.slice(4);
@@ -2517,7 +2588,7 @@ function PageInner() {
                 rest.forEach((p, i) => {
                   if (i > 0 && i % 6 === 0 && inlineHooks.length) {
                     const h = inlineHooks[(Math.floor(i / 6) - 1) % inlineHooks.length];
-                    if (h) out.push(<HookSolo key={`hook-${h.id}-${i}`} h={h} place={pm[h.placeId]} liked={hookLikes.has(h.id)} onOpen={openHook} onLike={toggleHookLike} />);
+                    if (h) out.push(<HookSolo key={`hook-${h.id}-${i}`} h={h} place={pm[h.placeId]} liked={hookLikes.has(h.id)} onOpen={openHook} onLike={onHookHeart} />);
                   }
                   out.push(<PlaceCard key={p.id} p={p} rank={i + 5} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => quickSaveFavorite(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} />);
                 });
@@ -3363,17 +3434,16 @@ function PageInner() {
         const showWarn = theme === "skip";
 
         return (
-          <div style={{ position: "fixed", inset: 0, zIndex: 950, background: C.bg, display: "flex", flexDirection: "column", overflowY: "hidden" }}>
+          <div style={{ position: "fixed", inset: 0, zIndex: 950, background: C.bg, display: "flex", flexDirection: "column", overflowY: "hidden", alignItems: isDesktop ? "center" : "stretch" }}>
             {/* Gradient hero header */}
-            <div style={{ background: `linear-gradient(155deg, ${acc}2A 0%, ${C.bg} 72%)`, borderBottom: `1px solid ${acc}35`, padding: "max(16px, calc(env(safe-area-inset-top) + 12px)) 16px 18px", flexShrink: 0 }}>
+            <div style={{ background: `linear-gradient(155deg, ${acc}2A 0%, ${C.bg} 72%)`, borderBottom: `1px solid ${acc}35`, padding: "max(16px, calc(env(safe-area-inset-top) + 12px)) 16px 18px", flexShrink: 0, width: "100%", maxWidth: isDesktop ? 880 : "none", boxSizing: "border-box" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
                 <button onClick={() => setHookDetail(null)} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "transparent", border: "none", color: acc, fontSize: 14, fontWeight: 800, cursor: "pointer", padding: 0 }}>‹ Back</button>
                 <button
-                  onClick={() => toggleHookLike(hookDetail.id)}
+                  onClick={() => { toggleHookLike(hookDetail.id); saveHookList(hookDetail, themePlaces); }}
                   style={{ display: "inline-flex", alignItems: "center", gap: 6, background: isLiked ? acc + "25" : "transparent", border: `1.5px solid ${isLiked ? acc : C.border}`, borderRadius: 999, padding: "6px 14px", color: isLiked ? acc : C.muted, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}
                 >
-                  {isLiked ? "❤️ Saved" : "🤍 Save"}
-                  {hookLikes.size > 0 && <span style={{ fontSize: 10.5, color: C.muted }}>· {hookLikes.size}</span>}
+                  {isLiked ? "❤️ Saved to lists" : "🤍 Save to lists"}
                 </button>
               </div>
               <div style={{ fontSize: 10, fontWeight: 800, color: acc, textTransform: "uppercase", letterSpacing: "1px", marginBottom: 7 }}>{hookDetail.emoji} {hookDetail.label}</div>
@@ -3389,7 +3459,7 @@ function PageInner() {
             </div>
 
             {/* Scrollable editorial list */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px calc(24px + env(safe-area-inset-bottom))" }}>
+            <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px calc(24px + env(safe-area-inset-bottom))", width: "100%", maxWidth: isDesktop ? 880 : "none", boxSizing: "border-box" }}>
               {themePlaces.length === 0 && (
                 <div style={{ textAlign: "center", padding: "48px 24px", color: C.muted }}>
                   <div style={{ display: "inline-flex", animation: "wfbob 1.4s ease-in-out infinite", marginBottom: 12 }}><Critter size={48} /></div>
@@ -3517,19 +3587,33 @@ function PageInner() {
         <div style={sheetBg} onClick={() => setAuthOpen(false)}>
           <div style={{ ...sheet, padding: "20px 16px 32px" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ width: 36, height: 4, background: C.border, borderRadius: 2, margin: "0 auto 16px" }} />
-            <div style={{ fontSize: 18, fontWeight: 800, color: C.text, marginBottom: 6 }}>Sign in to Wayfind</div>
-            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5, marginBottom: 16 }}>Save your spots to your account so they follow you across devices. We email a one-tap link, no password needed.</div>
-            <input
-              type="email"
-              inputMode="email"
-              autoCapitalize="none"
-              autoCorrect="off"
-              value={authEmail}
-              onChange={(e) => setAuthEmail(e.target.value)}
-              placeholder="you@email.com"
-              style={{ width: "100%", boxSizing: "border-box", padding: "13px 14px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 15, marginBottom: 12, outline: "none" }}
-            />
-            <button onClick={sendMagicLink} disabled={authSending || !authEmail} style={{ width: "100%", padding: 14, borderRadius: 12, border: "none", background: C.accent, color: "#0D1117", fontSize: 15, fontWeight: 800, cursor: authSending || !authEmail ? "default" : "pointer", opacity: authSending || !authEmail ? 0.6 : 1 }}>{authSending ? "Sending…" : "Email me a sign-in link"}</button>
+            <div style={{ fontSize: 18, fontWeight: 800, color: C.text, marginBottom: 6 }}>{authMode === "signup" ? "Create your Wayfind account" : "Sign in to Wayfind"}</div>
+            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5, marginBottom: 16 }}>Save your spots so they follow you across devices.</div>
+
+            <button onClick={() => signInWithProvider("google")} style={{ width: "100%", padding: 13, borderRadius: 12, border: `1px solid ${C.border}`, background: "#FFFFFF", color: "#1F2937", fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+              <span style={{ fontSize: 16, fontWeight: 800 }}>G</span> Continue with Google
+            </button>
+            <button onClick={() => signInWithProvider("apple")} style={{ width: "100%", padding: 13, borderRadius: 12, border: "none", background: "#000000", color: "#FFFFFF", fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+               Continue with Apple
+            </button>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+              <div style={{ flex: 1, height: 1, background: C.border }} />
+              <div style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>or with email</div>
+              <div style={{ flex: 1, height: 1, background: C.border }} />
+            </div>
+
+            <input type="email" inputMode="email" autoCapitalize="none" autoCorrect="off" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} placeholder="you@email.com"
+              style={{ width: "100%", boxSizing: "border-box", padding: "13px 14px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 15, marginBottom: 10, outline: "none" }} />
+            <input type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} placeholder="Password"
+              style={{ width: "100%", boxSizing: "border-box", padding: "13px 14px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 15, marginBottom: 12, outline: "none" }} />
+            <button onClick={passwordAuth} disabled={authSending || !authEmail || !authPassword} style={{ width: "100%", padding: 14, borderRadius: 12, border: "none", background: C.accent, color: "#0D1117", fontSize: 15, fontWeight: 800, cursor: authSending || !authEmail || !authPassword ? "default" : "pointer", opacity: authSending || !authEmail || !authPassword ? 0.6 : 1 }}>
+              {authSending ? "…" : authMode === "signup" ? "Create account" : "Sign in"}
+            </button>
+            <div style={{ textAlign: "center", marginTop: 14, fontSize: 13, color: C.muted }}>
+              {authMode === "signup" ? "Already have an account? " : "New here? "}
+              <span onClick={() => setAuthMode(authMode === "signup" ? "signin" : "signup")} style={{ color: C.accent, fontWeight: 700, cursor: "pointer" }}>{authMode === "signup" ? "Sign in" : "Create one"}</span>
+            </div>
           </div>
         </div>
       )}
@@ -3599,7 +3683,7 @@ function SwipeRow({ children, onDelete }) {
       <div style={{ position: "absolute", inset: 0, display: "flex", justifyContent: "flex-end" }}>
         <div onClick={(e) => { e.stopPropagation(); onDelete(); }} style={{ width: REVEAL, background: C.red, color: "#fff", fontWeight: 800, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>Delete</div>
       </div>
-      <div onTouchStart={start} onTouchMove={move} onTouchEnd={end} style={{ transform: `translateX(${dx}px)`, transition: drag ? "none" : "transform .2s ease", background: C.bg, position: "relative" }}>
+      <div onTouchStart={start} onTouchMove={move} onTouchEnd={end} style={{ transform: `translateX(${dx}px)`, transition: drag ? "none" : "transform .2s ease", background: C.bg, position: "relative", touchAction: "pan-y" }}>
         {children}
       </div>
     </div>
