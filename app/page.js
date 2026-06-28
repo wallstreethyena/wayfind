@@ -2031,8 +2031,8 @@ function PageInner() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 2 }}>
               <div style={{ fontSize: 12.5, color: C.muted }}>
                 {view.length} result{view.length === 1 ? "" : "s"} ·{" "}
-                <span onClick={() => setSortOpen((o) => !o)} style={{ color: C.accent, fontWeight: 700, cursor: "pointer" }}>
-                  {sortBy === "near" ? "closest first" : "ranked best first"} ▾
+                <span style={{ color: C.accent, fontWeight: 700 }}>
+                  {sortBy === "near" ? "closest first" : "ranked best first"}
                 </span>
               </div>
               {searchLabel && (
@@ -2042,12 +2042,38 @@ function PageInner() {
           </>
         )}
       </div>
-      {sortOpen && !loading && (
+      {!loading && (
         <div style={{ padding: "0 2px 10px" }}>
-          <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
-            <button onClick={() => { setSortBy("best"); setSortOpen(false); }} style={{ padding: "5px 12px", borderRadius: 16, border: "none", background: sortBy === "best" ? C.accent : C.card, color: sortBy === "best" ? "#fff" : C.light, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>Best first</button>
-            <button onClick={() => { setSortBy("near"); setSortOpen(false); }} style={{ padding: "5px 12px", borderRadius: 16, border: "none", background: sortBy === "near" ? C.accent : C.card, color: sortBy === "near" ? "#fff" : C.light, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>Closest</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+            <button onClick={() => setSortBy("best")} style={{ padding: "6px 14px", borderRadius: 999, border: `1.5px solid ${sortBy === "best" ? C.accent : C.border}`, background: sortBy === "best" ? C.accent : "transparent", color: sortBy === "best" ? "#0D1117" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>⭐ Best first</button>
+            <button onClick={() => setSortBy("near")} style={{ padding: "6px 14px", borderRadius: 999, border: `1.5px solid ${sortBy === "near" ? C.accent : C.border}`, background: sortBy === "near" ? C.accent : "transparent", color: sortBy === "near" ? "#0D1117" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>📍 Closest</button>
+            {sortBy === "near" && (
+              <button onClick={() => setShowRadiusWheel((o) => !o)} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 999, border: `1.5px solid ${C.accent}`, background: C.adim, color: C.accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>📏 {Math.round(searchRadius / 1609)} mi {showRadiusWheel ? "▲" : "▼"}</button>
+            )}
           </div>
+          {sortBy === "near" && showRadiusWheel && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11.5, color: C.muted, fontWeight: 600, marginBottom: 8 }}>How far are you willing to go?</div>
+              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
+                {[
+                  { label: "5 mi", val: 8047 },
+                  { label: "10 mi", val: 16093 },
+                  { label: "15 mi", val: 24140 },
+                  { label: "20 mi", val: 32187 },
+                  { label: "30 mi", val: 48280 },
+                  { label: "50 mi", val: 80467 },
+                ].map((r) => {
+                  const on = searchRadius === r.val;
+                  return (
+                    <button key={r.val} onClick={() => { setSearchRadius(r.val); setShowRadiusWheel(false); }} style={{ flexShrink: 0, padding: "10px 18px", borderRadius: 12, border: `1.5px solid ${on ? C.accent : C.border}`, background: on ? C.accent : C.card, color: on ? "#fff" : C.light, fontSize: 14, fontWeight: 700, cursor: "pointer", textAlign: "center" }}>
+                      <div>{r.label}</div>
+                      <div style={{ fontSize: 10, opacity: 0.7, marginTop: 2 }}>{on ? "selected" : "away"}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.5 }}>Best = star rating weighted by number of reviews, so trusted favorites rank above lightly reviewed spots.</div>
         </div>
       )}
@@ -2211,56 +2237,6 @@ function PageInner() {
             <div style={isDesktop ? { display: "flex", gap: 24, alignItems: "flex-start" } : {}}>
               {/* LEFT column on desktop: intent chips + hooks + feed */}
               <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 800, color: C.text, marginBottom: 8 }}>Why are you heading out?</div>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
-                  {INTENTS.map((it) => {
-                    const on = intent === it.id;
-                    return (
-                      <button key={it.id} onClick={() => setIntent(on ? null : it.id)} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 15px", borderRadius: 999, border: `1.5px solid ${on ? C.accent : C.border}`, background: on ? C.accent : C.panel, color: on ? "#0D1117" : C.light, fontSize: 14, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>{it.icon} {it.label}</button>
-                    );
-                  })}
-                </div>
-              </div>
-              {/* Sort options + distance wheel on main screen */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-                <div style={{ display: "flex", background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: 3, gap: 2 }}>
-                  <button onClick={() => setSortBy("best")} style={{ padding: "5px 14px", borderRadius: 999, border: "none", background: sortBy === "best" ? C.accent : "transparent", color: sortBy === "best" ? "#fff" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>⭐ Best</button>
-                  <button onClick={() => setSortBy("near")} style={{ padding: "5px 14px", borderRadius: 999, border: "none", background: sortBy === "near" ? C.accent : "transparent", color: sortBy === "near" ? "#fff" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>📍 Near me</button>
-                </div>
-                {sortBy === "near" && (
-                  <button onClick={() => setShowRadiusWheel((o) => !o)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 999, border: `1.5px solid ${C.accent}`, background: C.adim, color: C.accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
-                    📏 {Math.round(searchRadius / 1609)} mi {showRadiusWheel ? "▲" : "▼"}
-                  </button>
-                )}
-              </div>
-              {sortBy === "near" && showRadiusWheel && (
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 11.5, color: C.muted, fontWeight: 600, marginBottom: 8 }}>How far are you willing to go?</div>
-                  <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
-                    {[
-                      { label: "5 mi", val: 8047 },
-                      { label: "10 mi", val: 16093 },
-                      { label: "15 mi", val: 24140 },
-                      { label: "20 mi", val: 32187 },
-                      { label: "30 mi", val: 48280 },
-                      { label: "50 mi", val: 80467 },
-                    ].map((r) => {
-                      const on = searchRadius === r.val;
-                      return (
-                        <button key={r.val} onClick={() => { setSearchRadius(r.val); setShowRadiusWheel(false); }} style={{ flexShrink: 0, padding: "10px 18px", borderRadius: 12, border: `1.5px solid ${on ? C.accent : C.border}`, background: on ? C.accent : C.card, color: on ? "#fff" : C.light, fontSize: 14, fontWeight: 700, cursor: "pointer", textAlign: "center" }}>
-                          <div>{r.label}</div>
-                          <div style={{ fontSize: 10, opacity: 0.7, marginTop: 2 }}>{on ? "selected" : "away"}</div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {hookCards.length > 0 && (
-                <HooksBanner hooks={hookCards} likedIds={hookLikes} totalLiked={hookLikes.size} onOpen={openHook} onLike={toggleHookLike} allPlaces={[...(suggested || []), ...places].filter(Boolean)} />
-              )}
               {!isDesktop && (
               <div style={{ background: C.adim, border: `1px solid ${C.accent}`, borderRadius: 16, padding: 16, marginBottom: 14 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: weather ? 11 : 6 }}>
@@ -2303,6 +2279,17 @@ function PageInner() {
                 <div style={{ fontSize: 11.5, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>Pick for me lands you on one of these spots at random, for when you cannot decide. Browse all opens the full menu by category.</div>
               </div>
               )}
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 800, color: C.text, marginBottom: 8 }}>Why are you heading out?</div>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
+                  {INTENTS.map((it) => {
+                    const on = intent === it.id;
+                    return (
+                      <button key={it.id} onClick={() => setIntent(on ? null : it.id)} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 15px", borderRadius: 999, border: `1.5px solid ${on ? C.accent : C.border}`, background: on ? C.accent : C.panel, color: on ? "#0D1117" : C.light, fontSize: 14, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>{it.icon} {it.label}</button>
+                    );
+                  })}
+                </div>
+              </div>
               {!isDesktop && foryouEvents && foryouEvents.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
@@ -2331,8 +2318,14 @@ function PageInner() {
                   <span style={{ fontSize: 13 }}>Try again in a moment or pick a category.</span>
                 </div>
               )}
-              {!suggestedLoading && suggested !== null && displayList.map((p, i) => (
+              {!suggestedLoading && suggested !== null && displayList.slice(0, 4).map((p, i) => (
                 <PlaceCard key={p.id} p={p} rank={i + 1} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => setSaveTarget(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} />
+              ))}
+              {hookCards.length > 0 && (
+                <HooksBanner hooks={hookCards} likedIds={hookLikes} totalLiked={hookLikes.size} onOpen={openHook} onLike={toggleHookLike} allPlaces={[...(suggested || []), ...places].filter(Boolean)} />
+              )}
+              {!suggestedLoading && suggested !== null && displayList.slice(4).map((p, i) => (
+                <PlaceCard key={p.id} p={p} rank={i + 5} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => setSaveTarget(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} />
               ))}
               <div style={{ height: 20 }} />
               </div>
