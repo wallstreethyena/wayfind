@@ -152,11 +152,11 @@ export default function MapView({ places, center, category, deviceLoc, onSelect,
     }
 
     const cc = center ? `${center.lat.toFixed(4)},${center.lng.toFixed(4)}` : "";
-    const centerChanged = cc && cc !== lastCenterRef.current;
+    const centerChanged = cc && lastCenterRef.current && cc !== lastCenterRef.current;
+    lastCenterRef.current = cc;
     if (centerChanged) {
       map.setCenter({ lat: center.lat, lng: center.lng });
       map.setZoom(12);
-      lastCenterRef.current = cc;
     } else if (places && places.length) {
       map.fitBounds(bounds, 60);
       if (places.length === 1) map.setZoom(15);

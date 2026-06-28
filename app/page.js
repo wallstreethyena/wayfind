@@ -855,7 +855,11 @@ function PageInner() {
     const url = (typeof window !== "undefined" && window.location && window.location.origin) ? window.location.origin : "https://wayfind-xi.vercel.app";
     shareLink("Wayfind", url, () => { setShareCopied(true); setTimeout(() => setShareCopied(false), 1800); }, "Find great things to do near you with Wayfind");
   }
-  function pickCat(id) { setCat(id); setSub("all"); setVibe("all"); setQuickFilter(null); setScreen("explore"); }
+  function pickCat(id) {
+    setCat(id); setSub("all"); setVibe("all"); setQuickFilter(null);
+    if (screen === "map") setMapMode("places");
+    else setScreen("explore");
+  }
   useEffect(() => { try { if (scrollRef.current) scrollRef.current.scrollTo({ top: 0 }); } catch (e) {} }, [cat]);
   function pickSub(id) { setSub(id); setVibe("all"); }
 
