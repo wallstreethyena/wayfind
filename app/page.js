@@ -3260,15 +3260,22 @@ function PageInner() {
                 );
               })}
 
-              {/* Bottom save action */}
+              {/* Bottom save + share actions */}
               {themePlaces.length > 0 && (
-                <button
-                  onClick={() => toggleHookLike(hookDetail.id)}
-                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px 0", borderRadius: 14, border: `1.5px solid ${isLiked ? acc : C.border}`, background: isLiked ? acc + "20" : "transparent", color: isLiked ? acc : C.light, fontSize: 14, fontWeight: 700, cursor: "pointer", marginTop: 4 }}
-                >
-                  {isLiked ? "❤️ Saved to my picks" : "🤍 Save this list"}
-                  {hookLikes.size > 0 && <span style={{ fontSize: 12, color: C.muted }}>· {hookLikes.size} total</span>}
-                </button>
+                <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                  <button
+                    onClick={() => toggleHookLike(hookDetail.id)}
+                    style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px 0", borderRadius: 14, border: `1.5px solid ${isLiked ? acc : C.border}`, background: isLiked ? acc + "20" : "transparent", color: isLiked ? acc : C.light, fontSize: 14, fontWeight: 700, cursor: "pointer" }}
+                  >
+                    {isLiked ? "❤️ Saved" : "🤍 Save this list"}
+                  </button>
+                  <button
+                    onClick={() => shareLink(hookDetail.themeTitle || hookDetail.hook || "My Wayfind picks", originUrl("/?list=" + encodeList(themePlaces)), () => showToast("Link copied"), `${hookDetail.themeTitle || "A few spots worth your time"} — my picks on Wayfind`)}
+                    style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px 0", borderRadius: 14, border: "none", background: acc, color: "#0D1117", fontSize: 14, fontWeight: 800, cursor: "pointer" }}
+                  >
+                    ↗ Share
+                  </button>
+                </div>
               )}
             </div>
           </div>
