@@ -1934,6 +1934,26 @@ function PageInner() {
     setLists({ ...lists, [listId]: { ...l, places: has ? l.places.filter((p) => p.id !== saveTarget.id) : [...l.places, saveTarget] } });
     setSaveTarget(null);
   }
+  // One-tap save straight to Favorites from a card heart.
+  function quickSaveFavorite(p) {
+    if (!p) return;
+    const fav = lists.favorites || { id: "favorites", name: "Favorites", emoji: "❤️", places: [] };
+    const has = fav.places.some((x) => x.id === p.id);
+    setLists({ ...lists, favorites: { ...fav, places: has ? fav.places.filter((x) => x.id !== p.id) : [...fav.places, p] } });
+    showToast(has ? "Removed from Favorites" : "❤️ Saved to Favorites");
+  }
+  // Save a whole curated hook list as its own list under Favorites.
+  function saveHookList(hook, places) {
+    if (!hook || !places || !places.length) return;
+    const key = "hook_" + hook.id;
+    if (lists[key]) {
+      const next = { ...lists }; delete next[key]; setLists(next);
+      showToast("Removed from your lists");
+    } else {
+      setLists({ ...lists, [key]: { id: key, name: hook.themeTitle || hook.hook || "Saved list", emoji: hook.emoji || "✨", places: places.map((x) => x) } });
+      showToast("❤️ Saved to your lists");
+    }
+  }
   const isSaved = (id) => Object.values(lists).some((l) => l.places.some((p) => p.id === id));
 
   function createList() {
@@ -2045,7 +2065,7 @@ function PageInner() {
       {!loading && (
         <div style={{ padding: "0 2px 10px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-            <button onClick={() => setSortBy("best")} style={{ padding: "6px 14px", borderRadius: 999, border: `1.5px solid ${sortBy === "best" ? C.accent : C.border}`, background: sortBy === "best" ? C.accent : "transparent", color: sortBy === "best" ? "#0D1117" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>⭐ Best first</button>
+            <button onClick={() => setSortBy("best")} style={{ padding: "6px 14px", borderRadius: 999, border: `1.5px solid ${sortBy === "best" ? C.accent : C.border}`, background: sortBy === "best" ? C.accent : "transparent", color: sortBy === "best" ? "#0D1117" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>⭐ Best</button>
             <button onClick={() => setSortBy("near")} style={{ padding: "6px 14px", borderRadius: 999, border: `1.5px solid ${sortBy === "near" ? C.accent : C.border}`, background: sortBy === "near" ? C.accent : "transparent", color: sortBy === "near" ? "#0D1117" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>📍 Closest</button>
             {sortBy === "near" && (
               <button onClick={() => setShowRadiusWheel((o) => !o)} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 999, border: `1.5px solid ${C.accent}`, background: C.adim, color: C.accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>📏 {Math.round(searchRadius / 1609)} mi {showRadiusWheel ? "▲" : "▼"}</button>
@@ -2086,13 +2106,13 @@ function PageInner() {
         </div>
       )}
       {view.slice(0, 3).map((p, i) => (
-        <PlaceCard key={p.id} p={p} rank={i + 1} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => setSaveTarget(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} />
+        <PlaceCard key={p.id} p={p} rank={i + 1} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => quickSaveFavorite(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} />
       ))}
       {view.length > 3 && hookCards.length > 0 && (
         <HooksBanner hooks={hookCards} likedIds={hookLikes} totalLiked={hookLikes.size} onOpen={openHook} onLike={toggleHookLike} allPlaces={[...(suggested || []), ...places].filter(Boolean)} />
       )}
       {view.slice(3).map((p, i) => (
-        <PlaceCard key={p.id} p={p} rank={i + 4} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => setSaveTarget(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} />
+        <PlaceCard key={p.id} p={p} rank={i + 4} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => quickSaveFavorite(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} />
       ))}
     </>
   );
@@ -2229,6 +2249,7 @@ function PageInner() {
           const likeCount = Object.keys(liked).length;
           const h = new Date().getHours();
           const part = h < 11 ? "this morning" : h < 15 ? "for lunch" : h < 17 ? "this afternoon" : h < 22 ? "tonight" : "right now";
+          const moment = h < 11 ? "Breakfast" : h < 15 ? "Lunch" : h < 17 ? "Afternoon" : h < 22 ? "Dinner" : "Late-night";
           const intentDef = intent ? INTENTS.find((x) => x.id === intent) : null;
           const reasons = [];
           reasons.push("the time of day");
@@ -2239,7 +2260,7 @@ function PageInner() {
               {/* LEFT column on desktop: intent chips + hooks + feed */}
               <div style={{ flex: 1, minWidth: 0 }}>
               {!isDesktop && (
-              <div style={{ position: "relative", overflow: "hidden", border: `1px solid ${C.accent}`, borderRadius: 16, padding: 16, marginBottom: 14, ...(heroPhoto ? { backgroundImage: `linear-gradient(180deg, rgba(13,17,23,.58) 0%, rgba(13,17,23,.80) 60%, rgba(13,17,23,.92) 100%), url(${heroPhoto})`, backgroundSize: "cover", backgroundPosition: "center" } : { background: C.adim }) }}>
+              <div style={{ position: "relative", overflow: "hidden", border: `1px solid ${C.accent}`, borderRadius: 16, padding: 16, marginBottom: 14, ...(heroPhoto ? { backgroundImage: `linear-gradient(180deg, rgba(13,17,23,.38) 0%, rgba(13,17,23,.62) 55%, rgba(13,17,23,.86) 100%), url("${heroPhoto}")`, backgroundSize: "cover", backgroundPosition: "center" } : { background: C.adim }) }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: weather ? 11 : 6 }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 11, fontWeight: 800, color: C.accent, letterSpacing: "0.6px", textTransform: "uppercase" }}>You are exploring</div>
@@ -2257,16 +2278,13 @@ function PageInner() {
                 {weather && (
                   <div style={{ display: "flex", gap: 7, marginBottom: 13, overflowX: "auto", paddingBottom: 2, WebkitOverflowScrolling: "touch" }}>
                     {weather.label && <span style={wstat}>{weather.label}</span>}
-                    {weather.hi != null && weather.lo != null && <span style={wstat}>H {weather.hi}° · L {weather.lo}°</span>}
                     {weather.feels != null && <span style={wstat}>Feels {weather.feels}°</span>}
                     {weather.wind != null && <span style={wstat}>💨 {weather.wind} mph</span>}
-                    {weather.rain != null && <span style={wstat}>💧 {weather.rain}%</span>}
-                    {weather.uv != null && <span style={wstat}>☀️ UV {weather.uv}</span>}
-                    {weather.sunset && <span style={wstat}>🌇 {weather.sunset}</span>}
+                    {weather.sunset && <span style={wstat}>🌅 Sunset {weather.sunset}</span>}
                   </div>
                 )}
-                <div style={{ fontSize: 17, fontWeight: 800, color: C.text }}>{intentDef ? intentDef.icon + " " + intentDef.label + " near you" : "✨ Picked for you " + part}</div>
-                <div style={{ fontSize: 13, color: C.light, lineHeight: 1.5, marginTop: 5 }}>{intentDef ? "Curated for " + intentDef.label.toLowerCase() + ", ranked by the Wayfind Score and shaped by " + reasons.join(", ") + "." : "A mix of food, drinks, nightlife, parks and things to do near you, ranked by the Wayfind Score and shaped by " + reasons.join(", ") + "."}</div>
+                <div style={{ fontSize: 17, fontWeight: 800, color: C.text }}>{intentDef ? intentDef.icon + " " + intentDef.label + " near you" : "✨ " + moment + " picks"}</div>
+                <div style={{ fontSize: 13, color: C.light, lineHeight: 1.5, marginTop: 5 }}>{intentDef ? "Curated for " + intentDef.label.toLowerCase() + ", ranked by the Wayfind Score and tuned to " + moment.toLowerCase() + "." : "The best-rated, currently open spots near you, tuned to " + moment.toLowerCase() + "."}</div>
                 {list.length > 0 && (
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7, flexWrap: "wrap" }}>
                     <div style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>⭐ {list.length} spots worth your time, ranked best first</div>
@@ -2320,19 +2338,19 @@ function PageInner() {
                 </div>
               )}
               {!suggestedLoading && suggested !== null && displayList.slice(0, 4).map((p, i) => (
-                <PlaceCard key={p.id} p={p} rank={i + 1} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => setSaveTarget(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} />
+                <PlaceCard key={p.id} p={p} rank={i + 1} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => quickSaveFavorite(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} />
               ))}
               {hookCards.length > 0 && (
                 <HooksBanner hooks={hookCards} likedIds={hookLikes} totalLiked={hookLikes.size} onOpen={openHook} onLike={toggleHookLike} allPlaces={[...(suggested || []), ...places].filter(Boolean)} />
               )}
               {!suggestedLoading && suggested !== null && displayList.slice(4).map((p, i) => (
-                <PlaceCard key={p.id} p={p} rank={i + 5} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => setSaveTarget(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} />
+                <PlaceCard key={p.id} p={p} rank={i + 5} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => quickSaveFavorite(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} />
               ))}
               <div style={{ height: 20 }} />
               </div>
               {isDesktop && (
                 <div style={{ width: 340, flexShrink: 0, position: "sticky", top: 12 }}>
-                  <div style={{ position: "relative", overflow: "hidden", border: `1px solid ${C.accent}`, borderRadius: 16, padding: 16, marginBottom: 14, ...(heroPhoto ? { backgroundImage: `linear-gradient(180deg, rgba(13,17,23,.58) 0%, rgba(13,17,23,.80) 60%, rgba(13,17,23,.92) 100%), url(${heroPhoto})`, backgroundSize: "cover", backgroundPosition: "center" } : { background: C.adim }) }}>
+                  <div style={{ position: "relative", overflow: "hidden", border: `1px solid ${C.accent}`, borderRadius: 16, padding: 16, marginBottom: 14, ...(heroPhoto ? { backgroundImage: `linear-gradient(180deg, rgba(13,17,23,.38) 0%, rgba(13,17,23,.62) 55%, rgba(13,17,23,.86) 100%), url("${heroPhoto}")`, backgroundSize: "cover", backgroundPosition: "center" } : { background: C.adim }) }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: weather ? 10 : 6 }}>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 10, fontWeight: 800, color: C.accent, letterSpacing: "0.6px", textTransform: "uppercase" }}>You are exploring</div>
@@ -2343,14 +2361,12 @@ function PageInner() {
                     {weather && (
                       <div style={{ display: "flex", gap: 5, marginBottom: 11, flexWrap: "wrap" }}>
                         {weather.label && <span style={wstat}>{weather.label}</span>}
-                        {weather.hi != null && weather.lo != null && <span style={wstat}>H {weather.hi}° · L {weather.lo}°</span>}
                         {weather.feels != null && <span style={wstat}>Feels {weather.feels}°</span>}
                         {weather.wind != null && <span style={wstat}>💨 {weather.wind} mph</span>}
-                        {weather.uv != null && <span style={wstat}>☀️ UV {weather.uv}</span>}
-                        {weather.sunset && <span style={wstat}>🌇 {weather.sunset}</span>}
+                        {weather.sunset && <span style={wstat}>🌅 Sunset {weather.sunset}</span>}
                       </div>
                     )}
-                    <div style={{ fontSize: 15, fontWeight: 800, color: C.text }}>{intentDef ? intentDef.icon + " " + intentDef.label + " near you" : "✨ Picked for you " + part}</div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: C.text }}>{intentDef ? intentDef.icon + " " + intentDef.label + " near you" : "✨ " + moment + " picks"}</div>
                     {list.length > 0 && <div style={{ fontSize: 11.5, color: C.muted, marginTop: 5, fontWeight: 600 }}>⭐ {list.length} spots, ranked best first</div>}
                     <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                       <button onClick={rollDice} style={{ flex: 1, padding: "10px 0", borderRadius: 12, border: "none", background: C.accent, color: "#0D1117", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>🎲 Pick for me</button>
@@ -2478,8 +2494,8 @@ function PageInner() {
               {!expLoading && (expPlaces || []).length > 0 && (
                 <div style={{ display: "flex", gap: 7, marginBottom: 12, overflowX: "auto", paddingBottom: 2, WebkitOverflowScrolling: "touch" }}>
                   <button onClick={() => setExpOpenOnly((o) => !o)} style={{ flexShrink: 0, whiteSpace: "nowrap", padding: "6px 12px", borderRadius: 999, border: `1.5px solid ${expOpenOnly ? C.green : C.border}`, background: expOpenOnly ? "rgba(34,197,94,.15)" : "transparent", color: expOpenOnly ? C.green : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>{expOpenOnly ? "✓ Open now" : "Open now"}</button>
-                  <button onClick={() => setExpSort("best")} style={{ flexShrink: 0, whiteSpace: "nowrap", padding: "6px 12px", borderRadius: 999, border: `1.5px solid ${expSort === "best" ? C.accent : C.border}`, background: expSort === "best" ? C.adim : "transparent", color: expSort === "best" ? C.accent : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Best first</button>
-                  <button onClick={() => setExpSort("near")} style={{ flexShrink: 0, whiteSpace: "nowrap", padding: "6px 12px", borderRadius: 999, border: `1.5px solid ${expSort === "near" ? C.accent : C.border}`, background: expSort === "near" ? C.adim : "transparent", color: expSort === "near" ? C.accent : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Closest to me</button>
+                  <button onClick={() => setExpSort("best")} style={{ flexShrink: 0, whiteSpace: "nowrap", padding: "6px 12px", borderRadius: 999, border: `1.5px solid ${expSort === "best" ? C.accent : C.border}`, background: expSort === "best" ? C.adim : "transparent", color: expSort === "best" ? C.accent : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Best</button>
+                  <button onClick={() => setExpSort("near")} style={{ flexShrink: 0, whiteSpace: "nowrap", padding: "6px 12px", borderRadius: 999, border: `1.5px solid ${expSort === "near" ? C.accent : C.border}`, background: expSort === "near" ? C.adim : "transparent", color: expSort === "near" ? C.accent : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Closest</button>
                   <button onClick={rollDice} style={{ flexShrink: 0, whiteSpace: "nowrap", padding: "6px 12px", borderRadius: 999, border: "none", background: C.accent, color: "#0D1117", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>🎲 Pick for me</button>
                 </div>
               )}
@@ -2513,7 +2529,7 @@ function PageInner() {
                 </div>
               )}
               {!expLoading && list.map((p, i) => (
-                <PlaceCard key={p.id} p={p} rank={i + 1} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => setSaveTarget(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} selectedBadge={activeBadge} />
+                <PlaceCard key={p.id} p={p} rank={i + 1} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => quickSaveFavorite(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} selectedBadge={activeBadge} />
               ))}
             </div>
           );
@@ -2558,7 +2574,7 @@ function PageInner() {
                   <button onClick={rollDice} style={{ width: "100%", marginBottom: 14, padding: "12px 0", borderRadius: 12, border: `1.5px solid ${C.accent}`, background: C.adim, color: C.accent, fontSize: 14.5, fontWeight: 800, cursor: "pointer" }}>🎲 Pick for me</button>
                 )}
                 {lists[activeList].places.map((p) => (
-                  <PlaceCard key={p.id} p={p} saved liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => setSaveTarget(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} onBadge={openExperience} />
+                  <PlaceCard key={p.id} p={p} saved liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => quickSaveFavorite(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} onBadge={openExperience} />
                 ))}
               </>
             )}
@@ -2574,7 +2590,7 @@ function PageInner() {
               <button onClick={() => { setSharedList(null); setScreen("explore"); }} style={{ background: C.accent, border: "none", color: "#fff", fontSize: 13, fontWeight: 700, padding: "8px 14px", borderRadius: 20, cursor: "pointer" }}>Explore ›</button>
             </div>
             {sharedList.map((p) => (
-              <PlaceCard key={p.id} p={p} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => setSaveTarget(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} onBadge={openExperience} />
+              <PlaceCard key={p.id} p={p} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => quickSaveFavorite(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} onBadge={openExperience} />
             ))}
           </div>
         )}
@@ -3265,7 +3281,7 @@ function PageInner() {
               {themePlaces.length > 0 && (
                 <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
                   <button
-                    onClick={() => toggleHookLike(hookDetail.id)}
+                    onClick={() => { toggleHookLike(hookDetail.id); saveHookList(hookDetail, themePlaces); }}
                     style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px 0", borderRadius: 14, border: `1.5px solid ${isLiked ? acc : C.border}`, background: isLiked ? acc + "20" : "transparent", color: isLiked ? acc : C.light, fontSize: 14, fontWeight: 700, cursor: "pointer" }}
                   >
                     {isLiked ? "❤️ Saved" : "🤍 Save this list"}
