@@ -129,18 +129,26 @@ function decodeList(str) {
     return Array.isArray(arr) ? arr.map(expandPlace) : null;
   } catch { return null; }
 }
-// Share a link via the OS share sheet, falling back to copy.
+// Share a link via the OS share sheet, falling back to copy. Passing url as a
+// distinct field (not buried in text) is what lets iMessage/Facebook unfurl a
+// rich preview card instead of showing the raw link as plain text.
 async function shareLink(title, url, onCopied, text) {
-  const combined = text ? `${text}\n${url}` : url;
   try {
-    if (navigator.share) { await navigator.share(text ? { text: combined } : { title, url }); return; }
+    if (navigator.share) { await navigator.share({ title, text: text || title, url }); return; }
   } catch { return; }
   try {
-    await navigator.clipboard.writeText(combined);
+    await navigator.clipboard.writeText(text ? `${text}\n${url}` : url);
     if (onCopied) onCopied();
   } catch {
     if (onCopied) onCopied();
   }
+}
+// Short random code for shareable list links (no ambiguous chars).
+function randCode() {
+  const a = "abcdefghijkmnpqrstuvwxyz23456789";
+  let out = "";
+  for (let i = 0; i < 7; i++) out += a[Math.floor(Math.random() * a.length)];
+  return out;
 }
 
 function galleryBtn(side) {
@@ -2074,6 +2082,27 @@ function PageInner() {
     setLists(next);
     setActiveList(null);
   }
+  // Build a shareable link. With Supabase we store the list and share a short
+  // code, so the URL is clean and unfurls into a rich preview. Without it we
+  // fall back to the long self-contained link.
+  async function buildListShareUrl(places, title) {
+    const payload = encodeList(places);
+    const n = (places || []).length;
+    const q = `t=${encodeURIComponent(title || "")}&loc=${encodeURIComponent(locName || "")}&n=${n}`;
+    if (supabase && payload) {
+      try {
+        const code = randCode();
+        const { error } = await supabase.from("shared_lists").insert({ code, payload, title: title || "", loc: locName || "", n });
+        if (!error) return originUrl(`/s/${code}?${q}`);
+      } catch {}
+    }
+    return originUrl(`/s/${payload}?${q}`);
+  }
+  async function shareList(places, title) {
+    if (!places || !places.length) return;
+    const url = await buildListShareUrl(places, title);
+    shareLink(`Wayfind list: ${title}`, url, () => showToast("Link copied"), "A few places I think we should check out. Found them on Wayfind");
+  }
 
   if (keyMissing) {
     return (
@@ -2651,16 +2680,38 @@ function PageInner() {
               <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>Your lists</div>
               <button onClick={() => setNewListOpen(true)} style={{ background: C.adim, border: `1px solid ${C.accent}`, color: C.accent, fontSize: 13, fontWeight: 700, padding: "7px 14px", borderRadius: 20, cursor: "pointer" }}>+ New list</button>
             </div>
-            {Object.values(lists).map((l) => (
-              <div key={l.id} onClick={() => setActiveList(l.id)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
-                <div style={{ width: 48, height: 48, borderRadius: "50%", background: C.card, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, border: `1px solid ${C.border}` }}>{l.emoji}</div>
+            {supabase && !user && (
+              <div onClick={() => setAuthOpen(true)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 14px", borderRadius: 14, border: `1px solid ${C.accent}`, background: C.adim, marginBottom: 16, cursor: "pointer" }}>
+                <div style={{ fontSize: 22 }}>☁️</div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{l.name}</div>
-                  <div style={{ fontSize: 13, color: C.muted }}>{l.places.length} place{l.places.length !== 1 ? "s" : ""}</div>
+                  <div style={{ fontSize: 14.5, fontWeight: 700, color: C.text }}>Sign in to save across devices</div>
+                  <div style={{ fontSize: 12.5, color: C.muted, marginTop: 2, lineHeight: 1.4 }}>Your lists live only on this phone right now. Back them up and open them anywhere.</div>
                 </div>
-                <span style={{ color: C.muted, fontSize: 20 }}>›</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: C.accent, whiteSpace: "nowrap" }}>Sign in ›</span>
               </div>
-            ))}
+            )}
+            {supabase && user && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, marginBottom: 16 }}>
+                <div style={{ fontSize: 13, color: C.muted, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Signed in as {user.email}</div>
+                <span onClick={signOutUser} style={{ fontSize: 13, fontWeight: 700, color: C.accent, cursor: "pointer" }}>Sign out</span>
+              </div>
+            )}
+            {Object.values(lists).map((l) => {
+              const row = (
+                <div onClick={() => setActiveList(l.id)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                  <div style={{ width: 48, height: 48, borderRadius: "50%", background: C.card, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, border: `1px solid ${C.border}` }}>{l.emoji}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{l.name}</div>
+                    <div style={{ fontSize: 13, color: C.muted }}>{l.places.length} place{l.places.length !== 1 ? "s" : ""}</div>
+                  </div>
+                  <span style={{ color: C.muted, fontSize: 20 }}>›</span>
+                </div>
+              );
+              return l.id === "favorites"
+                ? <div key={l.id}>{row}</div>
+                : <SwipeRow key={l.id} onDelete={() => deleteList(l.id)}>{row}</SwipeRow>;
+            })}
+            <div style={{ fontSize: 11.5, color: C.muted, textAlign: "center", marginTop: 14 }}>Swipe a list left to delete it.</div>
           </div>
         )}
 
@@ -2670,7 +2721,7 @@ function PageInner() {
               <button onClick={() => setActiveList(null)} style={{ background: "none", border: "none", color: C.accent, fontSize: 22, cursor: "pointer" }}>‹</button>
               <div style={{ flex: 1, fontSize: 17, fontWeight: 700, color: C.text }}>{lists[activeList].emoji} {lists[activeList].name}</div>
               {lists[activeList].places.length > 0 && (
-                <button onClick={() => { const lst = lists[activeList]; shareLink(`Wayfind list: ${lst.name}`, originUrl(`/s/${encodeList(lst.places)}?t=${encodeURIComponent(lst.name)}&loc=${encodeURIComponent(locName || "")}&n=${(lst.places || []).length}`), () => showToast("Link copied"), `A few places I think we should check out. Found them on Wayfind`); }} style={{ background: C.adim, border: `1px solid ${C.accent}`, color: C.accent, fontSize: 13, fontWeight: 700, padding: "7px 12px", borderRadius: 20, cursor: "pointer" }}>Share ↗</button>
+                <button onClick={() => shareList(lists[activeList].places, lists[activeList].name)} style={{ background: C.adim, border: `1px solid ${C.accent}`, color: C.accent, fontSize: 13, fontWeight: 700, padding: "7px 12px", borderRadius: 20, cursor: "pointer" }}>Share ↗</button>
               )}
               {activeList !== "favorites" && (
                 <button onClick={() => deleteList(activeList)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.red, fontSize: 16, width: 34, height: 34, borderRadius: 10, cursor: "pointer" }}>🗑</button>
@@ -3397,7 +3448,7 @@ function PageInner() {
                     {isLiked ? "❤️ Saved" : "🤍 Save this list"}
                   </button>
                   <button
-                    onClick={() => { const ttl = hookDetail.themeTitle || hookDetail.hook || "My Wayfind picks"; shareLink(ttl, originUrl(`/s/${encodeList(themePlaces)}?t=${encodeURIComponent(ttl)}&loc=${encodeURIComponent(locName || "")}&n=${themePlaces.length}`), () => showToast("Link copied"), `${ttl} — my picks on Wayfind`); }}
+                    onClick={async () => { const ttl = hookDetail.themeTitle || hookDetail.hook || "My Wayfind picks"; const url = await buildListShareUrl(themePlaces, ttl); shareLink(ttl, url, () => showToast("Link copied"), `${ttl} — my picks on Wayfind`); }}
                     style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px 0", borderRadius: 14, border: "none", background: acc, color: "#0D1117", fontSize: 14, fontWeight: 800, cursor: "pointer" }}
                   >
                     ↗ Share
@@ -3528,6 +3579,29 @@ function PageInner() {
   );
 }
 
+function SwipeRow({ children, onDelete }) {
+  const REVEAL = 84;
+  const [dx, setDx] = useState(0);
+  const [drag, setDrag] = useState(false);
+  const sx = useRef(0); const sy = useRef(0); const base = useRef(0); const horiz = useRef(false);
+  function start(e) { const t = e.touches[0]; sx.current = t.clientX; sy.current = t.clientY; horiz.current = false; setDrag(true); }
+  function move(e) {
+    const t = e.touches[0]; const mx = t.clientX - sx.current; const my = t.clientY - sy.current;
+    if (!horiz.current) { if (Math.abs(mx) > 10 && Math.abs(mx) > Math.abs(my)) horiz.current = true; else return; }
+    let nd = base.current + mx; if (nd > 0) nd = 0; if (nd < -(REVEAL + 40)) nd = -(REVEAL + 40); setDx(nd);
+  }
+  function end() { setDrag(false); const open = dx < -REVEAL / 2; const nd = open ? -REVEAL : 0; base.current = nd; setDx(nd); }
+  return (
+    <div style={{ position: "relative", overflow: "hidden" }}>
+      <div style={{ position: "absolute", inset: 0, display: "flex", justifyContent: "flex-end" }}>
+        <div onClick={(e) => { e.stopPropagation(); onDelete(); }} style={{ width: REVEAL, background: C.red, color: "#fff", fontWeight: 800, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>Delete</div>
+      </div>
+      <div onTouchStart={start} onTouchMove={move} onTouchEnd={end} style={{ transform: `translateX(${dx}px)`, transition: drag ? "none" : "transform .2s ease", background: C.bg, position: "relative" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
 function PlaceCard({ p, rank, saved, liked, disliked, onDetail, onSave, onLike, onDislike, line, onBadge, selectedBadge }) {
   const badges = experienceBadges(p, selectedBadge, 3);
   const pcat = primaryCategory(p);

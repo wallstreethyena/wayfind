@@ -79,3 +79,18 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- 6. Shared lists: short codes for shareable links with rich previews
+create table if not exists public.shared_lists (
+  code text primary key,
+  payload text not null,
+  title text,
+  loc text,
+  n int,
+  created_at timestamptz default now()
+);
+alter table public.shared_lists enable row level security;
+drop policy if exists "shared_lists public read" on public.shared_lists;
+create policy "shared_lists public read" on public.shared_lists for select using (true);
+drop policy if exists "shared_lists public insert" on public.shared_lists;
+create policy "shared_lists public insert" on public.shared_lists for insert with check (true);
