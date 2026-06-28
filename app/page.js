@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v2.4";
+const BUILD = "v2.5";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -1016,6 +1016,7 @@ function PageInner() {
   const [searchRadius, setSearchRadius] = useState(24000); // meters, default ~15 miles
   const [showRadiusWheel, setShowRadiusWheel] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
+  const [heroNonce, setHeroNonce] = useState(0); // taps on "show another angle" cycle the hero pick
   const [center, setCenter] = useState(DEFAULT_CENTER);
   const [deviceLoc, setDeviceLoc] = useState(null);
   const [locName, setLocName] = useState("");
@@ -1340,7 +1341,11 @@ function PageInner() {
     shareLink("Wayfind", url, () => { setShareCopied(true); setTimeout(() => setShareCopied(false), 1800); }, "Find great things to do near you with Wayfind");
   }
   function pickCat(id) { setCat(id); setSub("all"); setVibe("all"); setQuickFilter(null); setSearchMode(false); setSearchLabel(""); setScreen("explore"); }
-  useEffect(() => { try { if (scrollRef.current) scrollRef.current.scrollTo({ top: 0 }); } catch (e) {} }, [cat]);
+  // Reset the scroll container to the top whenever the list the user is looking
+  // at changes — category, sub-filter, vibe, sort, intent, distance, or screen.
+  // Without this, changing a filter leaves you stranded mid-list looking at
+  // different content.
+  useEffect(() => { try { if (scrollRef.current) scrollRef.current.scrollTo({ top: 0 }); } catch (e) {} }, [cat, sub, vibe, sortBy, intent, searchRadius, screen, activeBadge, expSort, expOpenOnly]);
   function pickSub(id) { setSub(id); setVibe("all"); }
 
   // Signal functions — record engagement, drive personalised ranking, trigger sign-up.
@@ -2491,6 +2496,30 @@ function PageInner() {
           reasons.push("the time of day");
           if (weather) reasons.push("today's weather");
           if (Object.values(lists).some((l) => (l.places || []).length)) reasons.push("places you have saved");
+          // ── HERO PICK ──────────────────────────────────────────────────────
+          // One standout to greet you. The feed is already tuned to time of day
+          // and today's weather upstream, so the hero draws from that tuned list
+          // and respects the active intent chip. Which angle greets you
+          // alternates by time bucket — the top-ranked pick in some buckets, a
+          // strong but less-obvious gem in others — so morning and afternoon
+          // never open on the same card. It is deterministic within a bucket, so
+          // it does not reshuffle on you; tapping "another angle" cycles between
+          // the two without refetching anything.
+          const heroBucket = h < 11 ? 0 : h < 15 ? 1 : h < 17 ? 2 : h < 22 ? 3 : 4;
+          const heroOpenList = displayList.filter((p) => p && p.openNow !== false);
+          const heroBase = heroOpenList.length ? heroOpenList : displayList.filter(Boolean);
+          const heroTop = heroBase.length ? heroBase[0] : null;
+          const heroGem = heroBase.length >= 3
+            ? (heroBase.slice(2, 8).reduce((b, p) => (!b || (p.rating || 0) > (b.rating || 0) ? p : b), null) || heroBase[2])
+            : null;
+          let heroOrder = (heroBucket % 2 === 0) ? [heroTop, heroGem] : [heroGem, heroTop];
+          heroOrder = heroOrder.filter((p, i, a) => p && a.findIndex((x) => x && x.id === p.id) === i);
+          const heroPick = heroOrder.length ? heroOrder[heroNonce % heroOrder.length] : null;
+          const heroSl = heroPick ? scoreLabel(heroPick.wfScore) : null;
+          const heroHook = heroPick ? hookCards.find((hk) => hk && hk.placeId === heroPick.id) : null;
+          const heroReason = heroPick ? ((heroHook && heroHook.hook) ? heroHook.hook : (blurbs[heroPick.id] || "")) : "";
+          const heroIsGem = !!(heroPick && heroGem && heroPick.id === heroGem.id && (!heroTop || heroGem.id !== heroTop.id));
+          const feedList = heroPick ? displayList.filter((p) => p && p.id !== heroPick.id) : displayList;
           return (
             <div style={isDesktop ? { display: "flex", gap: 24, alignItems: "flex-start" } : {}}>
               {/* LEFT column on desktop: intent chips + hooks + feed */}
@@ -2534,6 +2563,38 @@ function PageInner() {
                 <div style={{ fontSize: 11.5, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>Pick for me lands you on one of these spots at random, for when you cannot decide. Browse all opens the full menu by category.</div>
               </div>
               )}
+              {!suggestedLoading && suggested !== null && heroPick && (
+                <div style={{ marginBottom: 16, border: `1.5px solid ${C.accent}`, borderRadius: 18, overflow: "hidden", background: `linear-gradient(160deg, rgba(255,150,70,.10) 0%, ${C.card} 60%)`, boxShadow: "0 6px 24px rgba(0,0,0,.35)" }}>
+                  <div onClick={() => openDetail(heroPick)} style={{ cursor: "pointer" }}>
+                    <div style={{ position: "relative" }}>
+                      <FallbackImg src={heroPick.photo} icon="📍" style={{ width: "100%", height: 200, objectFit: "cover", display: "block" }} />
+                      <div style={{ position: "absolute", top: 12, left: 12, display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(0,0,0,.62)", border: `1px solid ${C.accent}80`, borderRadius: 999, padding: "5px 11px", backdropFilter: "blur(4px)" }}>
+                        <span style={{ fontSize: 12 }}>{heroIsGem ? "💎" : "✨"}</span>
+                        <span style={{ fontSize: 10, fontWeight: 800, color: C.accent, textTransform: "uppercase", letterSpacing: "0.7px" }}>{heroIsGem ? "Hidden gem for right now" : "Start here · " + moment + " pick"}</span>
+                      </div>
+                    </div>
+                    <div style={{ padding: 16 }}>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: C.text, lineHeight: 1.2 }}>{heroPick.name}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                        {heroSl && <span style={{ fontSize: 20, fontWeight: 900, color: C.accent }}>{heroSl.s}</span>}
+                        {heroSl && <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{heroSl.word}</span>}
+                        {heroPick.rating && <span style={{ color: "#F59E0B", fontSize: 13 }}>★ {heroPick.rating}</span>}
+                        {heroPick.reviews != null && <span style={{ fontSize: 12, color: C.muted }}>· {heroPick.reviews.toLocaleString()} reviews</span>}
+                        {heroPick.openNow === true && <span style={{ fontSize: 12, fontWeight: 700, color: C.green }}>· Open now</span>}
+                        {heroPick.openNow === false && <span style={{ fontSize: 12, fontWeight: 700, color: heroPick.nextOpen && heroPick.nextOpen.today ? C.gold : C.red }}>· {heroPick.nextOpen && heroPick.nextOpen.today ? heroPick.nextOpen.label : "Closed"}</span>}
+                        {heroPick.distMi != null && <span style={{ fontSize: 12, color: C.muted }}>· {heroPick.distMi.toFixed(1)} mi</span>}
+                      </div>
+                      {heroReason && <div style={{ fontSize: 14, color: C.light, lineHeight: 1.5, marginTop: 10 }}><span style={{ color: C.accent }}>✨ </span>{heroReason}</div>}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 10, padding: "0 16px 16px" }}>
+                    <button onClick={() => openDetail(heroPick)} style={{ flex: 2, background: C.accent, color: "#0D1117", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 800, padding: "13px 0", cursor: "pointer" }}>Take me there →</button>
+                    {heroOrder.length > 1 && (
+                      <button onClick={() => setHeroNonce((n) => n + 1)} style={{ flex: 1, background: "transparent", color: C.accent, border: `1.5px solid ${C.accent}`, borderRadius: 12, fontSize: 13.5, fontWeight: 800, padding: "13px 0", cursor: "pointer" }}>Another angle</button>
+                    )}
+                  </div>
+                </div>
+              )}
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 800, color: C.text, marginBottom: 8 }}>Why are you heading out?</div>
                 <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
@@ -2573,14 +2634,14 @@ function PageInner() {
                   <span style={{ fontSize: 13 }}>Try again in a moment or pick a category.</span>
                 </div>
               )}
-              {!suggestedLoading && suggested !== null && displayList.slice(0, 4).map((p, i) => (
+              {!suggestedLoading && suggested !== null && feedList.slice(0, 4).map((p, i) => (
                 <PlaceCard key={p.id} p={p} rank={i + 1} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => quickSaveFavorite(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} />
               ))}
               {hookCards.length > 0 && (
                 <HooksBanner hooks={hookCards.slice(0, 3)} likedIds={hookLikes} totalLiked={hookLikes.size} onOpen={openHook} onLike={onHookHeart} allPlaces={[...(suggested || []), ...places].filter(Boolean)} isDesktop={isDesktop} />
               )}
               {!suggestedLoading && suggested !== null && (() => {
-                const rest = displayList.slice(4);
+                const rest = feedList.slice(4);
                 const inlineHooks = hookCards.slice(3);
                 const pm = {};
                 [...(suggested || []), ...places].filter(Boolean).forEach((pp) => { if (pp && pp.id) pm[pp.id] = pp; });
