@@ -1,6 +1,7 @@
 "use client";
 import { Component, useEffect, useMemo, useRef, useState } from "react";
 import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, searchPlaces, fetchPlaceDetail, fetchPlaceById, findPlace, searchNearbyPlaces } from "../lib/google";
+import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
 const C = {
@@ -1044,6 +1045,79 @@ function PageInner() {
   const [signupOpen, setSignupOpen] = useState(false);
   const [signupEmail, setSignupEmail] = useState("");
   const [signupDone, setSignupDone] = useState(() => { try { return !!localStorage.getItem("wf_signed_up"); } catch { return false; } });
+  // Auth state (Supabase). Null user = signed out / no backend configured.
+  const [user, setUser] = useState(null);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authSending, setAuthSending] = useState(false);
+
+  // Restore session on load and listen for sign-in / sign-out.
+  useEffect(() => {
+    if (!supabase) return;
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (active && data && data.session && data.session.user) setUser(data.session.user);
+    }).catch(() => {});
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session && session.user ? session.user : null);
+    });
+    return () => { active = false; if (sub && sub.subscription) sub.subscription.unsubscribe(); };
+  }, []);
+
+  // Send a magic-link sign-in email.
+  async function sendMagicLink() {
+    if (!supabase || !authEmail) return;
+    setAuthSending(true);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({ email: authEmail.trim(), options: { emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined } });
+      if (error) { showToast("Could not send link"); }
+      else { showToast("Check your email for a sign-in link"); setAuthOpen(false); setAuthEmail(""); }
+    } catch { showToast("Could not send link"); }
+    setAuthSending(false);
+  }
+
+  async function signOutUser() {
+    if (!supabase) return;
+    try { await supabase.auth.signOut(); } catch {}
+    setUser(null);
+    showToast("Signed out");
+  }
+
+  // When a user signs in, push local favorites/likes up and pull theirs down,
+  // so saves persist to their account and sync across devices.
+  useEffect(() => {
+    if (!supabase || !user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const favPlaces = (lists.favorites && lists.favorites.places) || [];
+        if (favPlaces.length) {
+          await supabase.from("saved_places").upsert(
+            favPlaces.map((p) => ({ user_id: user.id, place_id: p.id, place: p, list_name: "Favorites" })),
+            { onConflict: "user_id,place_id,list_name", ignoreDuplicates: true }
+          );
+        }
+      } catch {}
+      try {
+        const { data: saved } = await supabase.from("saved_places").select("place").eq("user_id", user.id).eq("list_name", "Favorites");
+        if (!cancelled && saved) {
+          const remote = saved.map((r) => r.place).filter(Boolean);
+          setLists((prev) => {
+            const fav = prev.favorites || { id: "favorites", name: "Favorites", emoji: "❤️", places: [] };
+            const byId = {};
+            [...fav.places, ...remote].forEach((p) => { if (p && p.id) byId[p.id] = p; });
+            return { ...prev, favorites: { ...fav, places: Object.values(byId) } };
+          });
+        }
+        const { data: dbLikes } = await supabase.from("likes").select("place_id").eq("user_id", user.id);
+        if (!cancelled && dbLikes) {
+          setLiked((prev) => { const next = { ...prev }; dbLikes.forEach((r) => { next[r.place_id] = true; }); return next; });
+        }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [user]);
+
   // "Worth the Drive?" feature
   const [detailContext, setDetailContext] = useState(null); // theme that opened the detail ("drive", "gem", etc.)
   const [myVotes, setMyVotes] = useState(() => { try { return JSON.parse(localStorage.getItem("wf_drive_votes") || "{}"); } catch { return {}; } });
@@ -1194,6 +1268,13 @@ function PageInner() {
     }
     setLiked(nextLiked); setDisliked(nextDis);
     try { localStorage.setItem("wf_liked", JSON.stringify(nextLiked)); localStorage.setItem("wf_disliked", JSON.stringify(nextDis)); } catch {}
+    if (supabase && user) {
+      if (wasLiked) {
+        supabase.from("likes").delete().eq("user_id", user.id).eq("place_id", p.id).then(() => {}, () => {});
+      } else {
+        supabase.from("likes").upsert({ user_id: user.id, place_id: p.id, place: p }, { onConflict: "user_id,place_id" }).then(() => {}, () => {});
+      }
+    }
   }
   function toggleDislike(e, p) {
     e.stopPropagation();
@@ -1941,6 +2022,13 @@ function PageInner() {
     const has = fav.places.some((x) => x.id === p.id);
     setLists({ ...lists, favorites: { ...fav, places: has ? fav.places.filter((x) => x.id !== p.id) : [...fav.places, p] } });
     showToast(has ? "Removed from Favorites" : "❤️ Saved to Favorites");
+    if (supabase && user) {
+      if (has) {
+        supabase.from("saved_places").delete().eq("user_id", user.id).eq("place_id", p.id).eq("list_name", "Favorites").then(() => {}, () => {});
+      } else {
+        supabase.from("saved_places").upsert({ user_id: user.id, place_id: p.id, place: p, list_name: "Favorites" }, { onConflict: "user_id,place_id,list_name" }).then(() => {}, () => {});
+      }
+    }
   }
   // Save a whole curated hook list as its own list under Favorites.
   function saveHookList(hook, places) {
@@ -2128,7 +2216,14 @@ function PageInner() {
             <img src="/wordmark.png" alt="wayfind" onClick={openSuggested} style={{ height: 30, width: "auto", display: "block", cursor: "pointer" }} />
             {locName && <span style={{ fontSize: 13, fontWeight: 400, color: C.muted, marginLeft: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>· {locName}</span>}
           </div>
-          <button onClick={shareApp} aria-label="Share Wayfind" style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 800, padding: "7px 14px", borderRadius: 999, cursor: "pointer", background: C.accent, color: "#0D1117", border: "none" }}>{shareCopied ? "✓ Copied" : "↗ Share"}</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            {supabase && (user ? (
+              <button onClick={signOutUser} aria-label="Account" title={user.email || "Signed in"} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: "50%", border: `1px solid ${C.border}`, background: C.card, color: C.accent, fontSize: 14, fontWeight: 800, cursor: "pointer", textTransform: "uppercase" }}>{(user.email || "?").slice(0, 1)}</button>
+            ) : (
+              <button onClick={() => setAuthOpen(true)} style={{ flexShrink: 0, fontSize: 13, fontWeight: 800, padding: "7px 14px", borderRadius: 999, cursor: "pointer", background: C.card, color: C.accent, border: `1px solid ${C.accent}` }}>Sign in</button>
+            ))}
+            <button onClick={shareApp} aria-label="Share Wayfind" style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 800, padding: "7px 14px", borderRadius: 999, cursor: "pointer", background: C.accent, color: "#0D1117", border: "none" }}>{shareCopied ? "✓ Copied" : "↗ Share"}</button>
+          </div>
         </div>
         <div style={{ display: "flex", gap: 8, position: "relative" }}>
           <div style={{ flex: 1, position: "relative" }}>
@@ -3349,6 +3444,26 @@ function PageInner() {
       )}
 
       {/* Save-to-list sheet */}
+      {authOpen && (
+        <div style={sheetBg} onClick={() => setAuthOpen(false)}>
+          <div style={{ ...sheet, padding: "20px 16px 32px" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ width: 36, height: 4, background: C.border, borderRadius: 2, margin: "0 auto 16px" }} />
+            <div style={{ fontSize: 18, fontWeight: 800, color: C.text, marginBottom: 6 }}>Sign in to Wayfind</div>
+            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5, marginBottom: 16 }}>Save your spots to your account so they follow you across devices. We email a one-tap link, no password needed.</div>
+            <input
+              type="email"
+              inputMode="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              value={authEmail}
+              onChange={(e) => setAuthEmail(e.target.value)}
+              placeholder="you@email.com"
+              style={{ width: "100%", boxSizing: "border-box", padding: "13px 14px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 15, marginBottom: 12, outline: "none" }}
+            />
+            <button onClick={sendMagicLink} disabled={authSending || !authEmail} style={{ width: "100%", padding: 14, borderRadius: 12, border: "none", background: C.accent, color: "#0D1117", fontSize: 15, fontWeight: 800, cursor: authSending || !authEmail ? "default" : "pointer", opacity: authSending || !authEmail ? 0.6 : 1 }}>{authSending ? "Sending…" : "Email me a sign-in link"}</button>
+          </div>
+        </div>
+      )}
       {saveTarget && (
         <div style={sheetBg} onClick={() => setSaveTarget(null)}>
           <div style={{ ...sheet, padding: "20px 16px 32px" }} onClick={(e) => e.stopPropagation()}>
