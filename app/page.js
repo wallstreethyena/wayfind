@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v3.7";
+const BUILD = "v3.8";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -1099,6 +1099,7 @@ function PageInner() {
   const [sortBy, setSortBy] = useState("best");
   const [searchRadius, setSearchRadius] = useState(24000); // meters, default ~15 miles
   const [showRadiusWheel, setShowRadiusWheel] = useState(false);
+  const [showNearbyExp, setShowNearbyExp] = useState(false); // v3.7 Phase 2: ✨ Nearby experiences dropdown in the sort row
   const [sortOpen, setSortOpen] = useState(false);
   const [heroNonce, setHeroNonce] = useState(0); // taps on "show another angle" cycle the hero pick
   const [pickOpen, setPickOpen] = useState(false); // Pick-for-me panel expanded
@@ -2371,47 +2372,7 @@ function PageInner() {
 
   const exploreList = (
     <>
-      <div style={{ position: "sticky", top: 0, zIndex: 3, background: C.bg, margin: "0 -12px", padding: "10px 12px 8px", borderBottom: `1px solid ${C.border}` }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 19, fontWeight: 800, color: C.text, letterSpacing: "-0.2px" }}>{greetingText()}</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            <button onClick={rollDice} style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 800, padding: "6px 12px", borderRadius: 999, cursor: "pointer", whiteSpace: "nowrap", background: C.accent, color: "#0D1117", border: "none" }}>🎲 Pick for me</button>
-            <button onClick={() => setAllExpOpen(true)} style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 800, padding: "6px 12px", borderRadius: 999, cursor: "pointer", whiteSpace: "nowrap", background: C.adim, color: C.accent, border: `1px solid ${C.accent}` }}>✨ Experiences</button>
-          </div>
-        </div>
-        {weather && (
-          <div style={{ margin: "4px 0 0" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 15, fontWeight: 800, color: C.text }}>{weather.icon} {weather.temp}°</span>
-              {weather.label && <span style={{ fontSize: 13, color: C.light, fontWeight: 600 }}>{weather.label}</span>}
-              {weather.feels != null && <span style={{ fontSize: 12, color: C.muted }}>Feels {weather.feels}°</span>}
-            </div>
-            <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>
-              {weather.hi != null ? `H ${weather.hi}° L ${weather.lo}°` : ""}
-              {weather.rain != null ? ` · ☔ ${weather.rain}%` : ""}
-              {weather.wind != null ? ` · 💨 ${weather.wind} mph` : ""}
-              {weather.humidity != null ? ` · 💧 ${weather.humidity}%` : ""}
-              {weather.uv != null ? ` · ☀️ UV ${weather.uv}` : ""}
-              {weather.sunset ? ` · 🌅 Sunset ${weather.sunset}` : ""}
-            </div>
-          </div>
-        )}
-        <div style={{ fontSize: 13, color: C.light, fontWeight: 600, margin: "7px 0 8px" }}>{dynamicSubline(weather)}</div>
-        <div style={{ position: "relative" }}>
-          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2, WebkitOverflowScrolling: "touch" }}>
-            {HOME_CHIPS.map((k) => {
-              const e = EXPERIENCES[k];
-              if (!e) return null;
-              return (
-                <button key={k} onClick={() => openExperience(k)} style={{ flexShrink: 0, fontSize: 13, fontWeight: 700, padding: "7px 13px", borderRadius: 999, cursor: "pointer", whiteSpace: "nowrap", background: C.panel, color: C.light, border: `1px solid ${C.border}` }}>
-                  {e.icon} {e.label}
-                </button>
-              );
-            })}
-          </div>
-          <div style={{ position: "absolute", top: 0, right: 0, bottom: 6, width: 28, pointerEvents: "none", background: `linear-gradient(90deg, rgba(13,17,23,0), ${C.bg})` }} />
-        </div>
-      </div>
+      {/* v3.7 Phase 2: "Good evening" header (greeting, weather, Pick for me, Experiences button, experience pills) hidden per request. The ranked list below is computed from the same place data, unaffected. Experiences moved to the ✨ Nearby control in the sort row. */}
       <div style={{ padding: "10px 2px 6px" }}>
         {loading ? <Loader label="Finding the best spots" pad="0" /> : (
           <>
@@ -2435,10 +2396,27 @@ function PageInner() {
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
             <button onClick={() => setSortBy("best")} style={{ padding: "6px 14px", borderRadius: 999, border: `1.5px solid ${sortBy === "best" ? C.accent : C.border}`, background: sortBy === "best" ? C.accent : "transparent", color: sortBy === "best" ? "#0D1117" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>⭐ Best</button>
             <button onClick={() => setSortBy("near")} style={{ padding: "6px 14px", borderRadius: 999, border: `1.5px solid ${sortBy === "near" ? C.accent : C.border}`, background: sortBy === "near" ? C.accent : "transparent", color: sortBy === "near" ? "#0D1117" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>📍 Closest</button>
+            <button onClick={() => { setShowNearbyExp((o) => !o); setShowRadiusWheel(false); }} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 14px", borderRadius: 999, border: `1.5px solid ${showNearbyExp ? C.accent : C.border}`, background: showNearbyExp ? C.adim : "transparent", color: showNearbyExp ? C.accent : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>✨ Nearby {showNearbyExp ? "▲" : "▼"}</button>
             {sortBy === "near" && (
-              <button onClick={() => setShowRadiusWheel((o) => !o)} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 999, border: `1.5px solid ${C.accent}`, background: C.adim, color: C.accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>📏 {Math.round(searchRadius / 1609)} mi {showRadiusWheel ? "▲" : "▼"}</button>
+              <button onClick={() => { setShowRadiusWheel((o) => !o); setShowNearbyExp(false); }} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 999, border: `1.5px solid ${C.accent}`, background: C.adim, color: C.accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>📏 {Math.round(searchRadius / 1609)} mi {showRadiusWheel ? "▲" : "▼"}</button>
             )}
           </div>
+          {showNearbyExp && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11.5, color: C.muted, fontWeight: 600, marginBottom: 8 }}>Curated experiences near you</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {HOME_CHIPS.map((k) => {
+                  const e = EXPERIENCES[k];
+                  if (!e) return null;
+                  return (
+                    <button key={k} onClick={() => { setShowNearbyExp(false); openExperience(k); }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 14px", borderRadius: 12, border: `1.5px solid ${C.border}`, background: C.card, color: C.light, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                      <span>{e.icon}</span><span>{e.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {sortBy === "near" && showRadiusWheel && (
             <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 11.5, color: C.muted, fontWeight: 600, marginBottom: 8 }}>How far are you willing to go?</div>
@@ -2541,32 +2519,43 @@ function PageInner() {
 
       {/* Category tabs (Explore + Map). Hidden on home, where the app-tile grid replaces it. */}
       {screen !== "saved" && screen !== "shared" && screen !== "events" && screen !== "experience" && screen !== "surprise" && screen !== "suggested" && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 7, padding: "10px 14px", background: C.panel, flexShrink: 0 }}>
-          <button key="surprise" onClick={openSurprise} style={{ flexShrink: 0, padding: "8px 14px", borderRadius: 22, border: `1.5px solid ${C.purple}`, background: screen === "surprise" ? C.purple : "transparent", color: screen === "surprise" ? "#0D1117" : C.purple, fontSize: 13.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>🎁 Surprise Me</button>
-          {CATEGORIES.map((c) => {
-            const cc = CAT_COLOR[c.id] || { c: C.accent, dim: C.adim };
-            const on = cat === c.id && screen !== "surprise" && screen !== "suggested";
-            return (
-              <button key={c.id} onClick={() => {
-                // When on the map tab: update the category so pins refresh, but
-                // NEVER navigate away. Bypass pickCat entirely to avoid any
-                // closure or batching issue that could set screen to "explore".
-                if (screen === "map") {
-                  setCat(c.id); setSub("all"); setVibe("all"); setQuickFilter(null); setSearchMode(false); setSearchLabel("");
-                } else {
-                  pickCat(c.id);
-                }
-              }} style={{ flexShrink: 0, padding: "8px 14px", borderRadius: 22, border: `1.5px solid ${on ? cc.c : C.border}`, background: on ? cc.dim : "transparent", color: on ? cc.c : C.light, fontSize: 13.5, fontWeight: on ? 700 : 600, cursor: "pointer", whiteSpace: "nowrap" }}>{c.label}</button>
-            );
-          })}
-        </div>
+        screen === "map" ? (
+          /* v3.8: on the Map, categories render as compact 4-across tiles like home. Taps filter pins without leaving the map. */
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 7, padding: "10px 14px", background: C.panel, flexShrink: 0 }}>
+            <button key="surprise" onClick={openSurprise} style={{ minHeight: 56, borderRadius: 12, border: `1.5px solid ${C.purple}`, background: "transparent", color: C.purple, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, padding: "6px 4px" }}>
+              <span style={{ fontSize: 18, lineHeight: 1 }}>🎁</span>
+              <span style={{ fontSize: 10.5, fontWeight: 800 }}>Surprise</span>
+            </button>
+            {CATEGORIES.map((c) => {
+              const cc = CAT_COLOR[c.id] || { c: C.accent, dim: C.adim };
+              const on = cat === c.id;
+              return (
+                <button key={c.id} onClick={() => { setCat(c.id); setSub("all"); setVibe("all"); setQuickFilter(null); setSearchMode(false); setSearchLabel(""); }} style={{ minHeight: 56, borderRadius: 12, border: `1.5px solid ${on ? cc.c : C.border}`, background: on ? cc.dim : "transparent", color: on ? cc.c : C.light, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, padding: "6px 4px" }}>
+                  <span style={{ fontSize: 18, lineHeight: 1 }}>{CAT_ICONS[c.id] || "📍"}</span>
+                  <span style={{ fontSize: 10.5, fontWeight: on ? 800 : 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{c.label.replace(/^\S+\s/, "")}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, padding: "10px 14px", background: C.panel, flexShrink: 0 }}>
+            <button key="surprise" onClick={openSurprise} style={{ flexShrink: 0, padding: "8px 14px", borderRadius: 22, border: `1.5px solid ${C.purple}`, background: screen === "surprise" ? C.purple : "transparent", color: screen === "surprise" ? "#0D1117" : C.purple, fontSize: 13.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>🎁 Surprise Me</button>
+            {CATEGORIES.map((c) => {
+              const cc = CAT_COLOR[c.id] || { c: C.accent, dim: C.adim };
+              const on = cat === c.id && screen !== "surprise" && screen !== "suggested";
+              return (
+                <button key={c.id} onClick={() => { pickCat(c.id); }} style={{ flexShrink: 0, padding: "8px 14px", borderRadius: 22, border: `1.5px solid ${on ? cc.c : C.border}`, background: on ? cc.dim : "transparent", color: on ? cc.c : C.light, fontSize: 13.5, fontWeight: on ? 700 : 600, cursor: "pointer", whiteSpace: "nowrap" }}>{c.label}</button>
+              );
+            })}
+          </div>
+        )
       )}
 
-      {/* Sub-filter row (Explore + Map) */}
-      {screen !== "saved" && screen !== "shared" && screen !== "events" && screen !== "experience" && screen !== "surprise" && screen !== "suggested" && subs.length > 0 && (
-        <div style={{ display: "flex", gap: 7, overflowX: "auto", padding: "2px 14px 8px", background: C.panel, flexShrink: 0 }}>
+      {/* Sub-filter row. v3.8: Explore shows it as 4-across tiles; on the Map it is moved onto the map as a bottom overlay (see map render below). */}
+      {screen === "explore" && subs.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 7, padding: "2px 14px 10px", background: C.panel, flexShrink: 0 }}>
           {subs.map((s) => (
-            <button key={s.id} onClick={() => pickSub(s.id)} style={{ flexShrink: 0, padding: "5px 13px", borderRadius: 16, border: "none", background: sub === s.id ? C.accent : C.card, color: sub === s.id ? "#fff" : C.light, fontSize: 12.5, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>{s.label}</button>
+            <button key={s.id} onClick={() => pickSub(s.id)} style={{ minHeight: 40, padding: "8px 6px", borderRadius: 12, border: `1.5px solid ${sub === s.id ? C.accent : C.border}`, background: sub === s.id ? C.accent : C.card, color: sub === s.id ? "#fff" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.label}</button>
           ))}
         </div>
       )}
@@ -2609,6 +2598,15 @@ function PageInner() {
                         ))}
                       </div>
                       {eventsUnavailable && <div style={{ fontSize: 11.5, color: "#fff", textAlign: "center", marginTop: 6, textShadow: "0 1px 4px rgba(0,0,0,.8)" }}>Add a Ticketmaster key in Vercel to switch events on.</div>}
+                    </div>
+                  )}
+                  {mapMode === "places" && subs.length > 0 && (
+                    <div style={{ position: "absolute", left: 0, right: 0, bottom: 12, zIndex: 5, padding: "0 12px" }}>
+                      <div style={{ display: "flex", gap: 6, overflowX: "auto", background: "rgba(13,17,23,.92)", border: `1px solid ${C.border}`, borderRadius: 14, padding: 8, WebkitOverflowScrolling: "touch" }}>
+                        {subs.map((s) => (
+                          <button key={s.id} onClick={() => pickSub(s.id)} style={{ flexShrink: 0, padding: "7px 14px", borderRadius: 10, border: "none", cursor: "pointer", background: sub === s.id ? C.accent : "transparent", color: sub === s.id ? "#fff" : C.light, fontSize: 12.5, fontWeight: 700, whiteSpace: "nowrap" }}>{s.label}</button>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
