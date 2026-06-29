@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v3.8";
+const BUILD = "v3.9";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -467,6 +467,21 @@ function FallbackImg({ src, alt, style, icon, onClick }) {
     );
   }
   return <img src={src} alt={alt || ""} loading="lazy" draggable={false} onError={() => setBad(true)} onClick={onClick} style={style} />;
+}
+
+// v3.9: a home-grid tile backed by a generated image (public/tiles/*.png). If the image
+// is missing or fails to load it falls back to the original icon and label tile, so the
+// grid never breaks even before the images are uploaded. `overlay` lets the location and
+// weather tiles paint live text (city, current conditions) over an intentionally blank frame.
+function ImgTile({ src, onClick, overlay, fallback }) {
+  const [err, setErr] = useState(false);
+  return (
+    <button onClick={onClick} style={{ position: "relative", width: "100%", aspectRatio: "1 / 1", minHeight: 82, borderRadius: 14, overflow: "hidden", border: err ? `1px solid ${C.border}` : "none", background: C.card, cursor: "pointer", padding: 0, display: "block" }}>
+      {!err && <img src={src} alt="" draggable={false} onError={() => setErr(true)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }} />}
+      {!err && overlay}
+      {err && <div style={{ width: "100%", height: "100%", minHeight: 82, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 5, padding: "12px 6px" }}>{fallback}</div>}
+    </button>
+  );
 }
 
 // Branded loading indicator: the Wayfind pin, gently pulsing.
@@ -2675,28 +2690,26 @@ function PageInner() {
                 </button>
                 <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.7, textTransform: "uppercase", color: C.muted, margin: "0 2px 9px" }}>Discover {locName ? locName.split(",")[0] : "your area"}</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                  <button onClick={openSurprise} style={{ minHeight: 82, borderRadius: 14, border: `1px solid ${C.border}`, background: C.card, color: C.text, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 6px" }}>
-                    <span style={{ fontSize: 24, lineHeight: 1 }}>🎁</span>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: C.purple }}>Surprise Me</span>
-                  </button>
-                  <button onClick={() => setMenuSheet("pick")} style={{ minHeight: 82, borderRadius: 14, border: `1px solid ${C.border}`, background: C.card, color: C.text, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 6px" }}>
-                    <span style={{ fontSize: 24, lineHeight: 1 }}>🎲</span>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: C.accent }}>Pick for me</span>
-                  </button>
-                  <button onClick={() => setMenuSheet("explore")} style={{ minHeight: 82, borderRadius: 14, border: `1px solid ${C.border}`, background: C.card, color: C.text, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, padding: "12px 6px" }}>
-                    <span style={{ fontSize: 22, lineHeight: 1 }}>📍</span>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: C.green }}>This area</span>
-                    {locName && <span style={{ fontSize: 9.5, fontWeight: 600, color: C.muted, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", padding: "0 2px" }}>{locName.split(",")[0]}</span>}
-                  </button>
-                  <button onClick={() => setMenuSheet("experiences")} style={{ minHeight: 82, borderRadius: 14, border: `1px solid ${C.border}`, background: C.card, color: C.text, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 6px" }}>
-                    <span style={{ fontSize: 23, lineHeight: 1 }}>✨</span>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: C.gold }}>Experiences</span>
-                  </button>
+                  <ImgTile src="/tiles/surprise.png" onClick={openSurprise}
+                    fallback={<><span style={{ fontSize: 24, lineHeight: 1 }}>🎁</span><span style={{ fontSize: 12, fontWeight: 800, color: C.purple }}>Surprise Me</span></>} />
+                  <ImgTile src="/tiles/dice.png" onClick={() => setMenuSheet("pick")}
+                    fallback={<><span style={{ fontSize: 24, lineHeight: 1 }}>🎲</span><span style={{ fontSize: 12, fontWeight: 800, color: C.accent }}>Pick for me</span></>} />
+                  <ImgTile src="/tiles/location.png" onClick={() => setMenuSheet("explore")}
+                    overlay={<div style={{ position: "absolute", left: 0, right: 0, bottom: "11%", textAlign: "center", padding: "0 6px", pointerEvents: "none" }}>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,.85)" }}>This area</div>
+                      {locName && <div style={{ fontSize: 9.5, fontWeight: 700, color: "#FFD9A8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textShadow: "0 1px 4px rgba(0,0,0,.85)" }}>{locName.split(",")[0]}</div>}
+                    </div>}
+                    fallback={<><span style={{ fontSize: 22, lineHeight: 1 }}>📍</span><span style={{ fontSize: 12, fontWeight: 800, color: C.green }}>This area</span>{locName && <span style={{ fontSize: 9.5, fontWeight: 600, color: C.muted, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", padding: "0 2px" }}>{locName.split(",")[0]}</span>}</>} />
+                  <ImgTile src="/tiles/experiences.png" onClick={() => setMenuSheet("experiences")}
+                    fallback={<><span style={{ fontSize: 23, lineHeight: 1 }}>✨</span><span style={{ fontSize: 12, fontWeight: 800, color: C.gold }}>Experiences</span></>} />
                   {weather && (
-                    <button onClick={() => setMenuSheet("weather")} style={{ minHeight: 82, borderRadius: 14, border: `1px solid ${C.border}`, background: C.card, color: C.text, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 5, padding: "12px 6px" }}>
-                      <img src={"/wx/" + (weather.img || "cloudy") + ".png"} alt="" style={{ height: 28, width: "auto", display: "block" }} />
-                      <span style={{ fontSize: 13, fontWeight: 800, color: C.blue }}>{weather.temp}° <span style={{ color: C.muted, fontWeight: 700 }}>Weather</span></span>
-                    </button>
+                    <ImgTile src="/tiles/weather.png" onClick={() => setMenuSheet("weather")}
+                      overlay={<div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1, padding: "0 6px", pointerEvents: "none" }}>
+                        <img src={"/wx/" + (weather.img || "cloudy") + ".png"} alt="" style={{ height: 30, width: "auto", display: "block" }} />
+                        <div style={{ fontSize: 17, fontWeight: 800, color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,.85)" }}>{weather.temp}°</div>
+                        {weather.label && <div style={{ fontSize: 9.5, fontWeight: 700, color: "#BFE3FF", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%", textShadow: "0 1px 4px rgba(0,0,0,.85)" }}>{weather.label}</div>}
+                      </div>}
+                      fallback={<><img src={"/wx/" + (weather.img || "cloudy") + ".png"} alt="" style={{ height: 28, width: "auto", display: "block" }} /><span style={{ fontSize: 13, fontWeight: 800, color: C.blue }}>{weather.temp}° <span style={{ color: C.muted, fontWeight: 700 }}>Weather</span></span></>} />
                   )}
                 </div>
               </div>
