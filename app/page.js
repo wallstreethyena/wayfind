@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v4.4";
+const BUILD = "v4.5";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -2533,7 +2533,7 @@ function PageInner() {
             ) : (
               <button onClick={() => setAuthOpen(true)} style={{ flexShrink: 0, fontSize: 13, fontWeight: 800, padding: "7px 14px", borderRadius: 999, cursor: "pointer", background: C.card, color: C.accent, border: `1px solid ${C.accent}` }}>Sign in</button>
             ))}
-            <button onClick={shareApp} aria-label="Share Wayfind" style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 800, padding: "7px 14px", borderRadius: 999, cursor: "pointer", background: C.accent, color: "#0D1117", border: "none" }}>{shareCopied ? "✓ Copied" : "↗ Share"}</button>
+            <button onClick={shareApp} aria-label="Share Wayfind" style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, fontSize: 15, fontWeight: 700, borderRadius: 999, cursor: "pointer", background: "transparent", color: C.muted, border: `1px solid ${C.border}` }}>{shareCopied ? "✓" : "↗"}</button>
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, position: "relative" }}>
@@ -2712,8 +2712,19 @@ function PageInner() {
           const heroOpensLater = !!(heroPick && heroPick.openNow === false && heroPick.nextOpen && heroPick.nextOpen.today);
           let heroBadgeIcon = heroIsGem ? "💎" : "📍";
           let heroBadgeText = heroIsGem ? "Hidden gem nearby" : "Top pick nearby";
-          if (heroOpenConfirmed) { heroBadgeIcon = heroIsGem ? "💎" : "✨"; heroBadgeText = heroIsGem ? "Hidden gem · open now" : "Start here · open now"; }
+          if (heroOpenConfirmed) { heroBadgeIcon = heroIsGem ? "💎" : "✨"; heroBadgeText = heroIsGem ? "Hidden gem · open now" : "Open now"; }
           else if (heroOpensLater) { heroBadgeIcon = "⏳"; heroBadgeText = "Worth the wait · " + heroPick.nextOpen.label; }
+          // v4.5: a crisp, always-true reason line so the hero reads as a decision, not a listing.
+          const whyTime = h < 11 ? "a morning start" : h < 15 ? "lunch" : h < 17 ? "the afternoon" : h < 22 ? "tonight" : "a late one";
+          const heroWhy = [];
+          if (heroPick) {
+            if (heroOpenConfirmed) heroWhy.push("open now");
+            if (heroPick.rating != null && heroPick.rating >= 4.5) heroWhy.push("loved locally (" + heroPick.rating + "★)");
+            else if (heroSl && heroSl.word) heroWhy.push(heroSl.word.toLowerCase() + " rated");
+            if (weather && weather.temp != null && weather.temp >= 58 && weather.temp <= 92 && !(weather.label && /rain|storm|snow|sleet/i.test(weather.label))) heroWhy.push("nice out right now");
+            if (heroPick.distMi != null && heroPick.distMi <= 3) heroWhy.push("only " + heroPick.distMi.toFixed(1) + " mi");
+            heroWhy.push("good for " + whyTime);
+          }
           const feedList = heroPick ? displayList.filter((p) => p && p.id !== heroPick.id) : displayList;
           // Trust fix (v4.3): closed places no longer hold the top slots. Sort by the
           // chosen order first (score for Best, distance for Closest), then stably push
@@ -2736,8 +2747,8 @@ function PageInner() {
                     <span style={{ background: C.accent, borderRadius: 3 }} />
                   </span>
                   <div style={{ textAlign: "left" }}>
-                    <div style={{ fontSize: 17, fontWeight: 800 }}>Pick a category</div>
-                    <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>Food, nightlife, beaches, hotels and more</div>
+                    <div style={{ fontSize: 17, fontWeight: 800 }}>What are you in the mood for?</div>
+                    <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>Food, nightlife, beaches, and more</div>
                   </div>
                   <span style={{ marginLeft: "auto", color: C.accent, fontSize: 20 }}>›</span>
                 </button>
@@ -2757,6 +2768,9 @@ function PageInner() {
                   <CleanTile onClick={() => setMenuSheet("community")} color={C.border} labelColor={C.text} icon="📚" label="Local Events" />
                 </div>
               </div>
+              {!suggestedLoading && suggested !== null && heroPick && (
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.7, textTransform: "uppercase", color: C.accent, margin: "2px 2px 8px" }}>Your next move</div>
+              )}
               {!suggestedLoading && suggested !== null && heroPick && (
                 <div style={{ marginBottom: 16, border: `1.5px solid ${C.accent}`, borderRadius: 18, overflow: "hidden", background: `linear-gradient(160deg, rgba(255,150,70,.10) 0%, ${C.card} 60%)`, boxShadow: "0 6px 24px rgba(0,0,0,.35)" }}>
                   <div onClick={() => openDetail(heroPick)} style={{ cursor: "pointer" }}>
@@ -2778,7 +2792,7 @@ function PageInner() {
                         {heroPick.openNow === false && <span style={{ fontSize: 12, fontWeight: 700, color: heroPick.nextOpen && heroPick.nextOpen.today ? C.gold : C.red }}>· {heroPick.nextOpen && heroPick.nextOpen.today ? heroPick.nextOpen.label : "Closed"}</span>}
                         {heroPick.distMi != null && <span style={{ fontSize: 12, color: C.muted }}>· {heroPick.distMi.toFixed(1)} mi</span>}
                       </div>
-                      {heroReason && <div style={{ fontSize: 14, color: C.light, lineHeight: 1.5, marginTop: 10 }}><span style={{ color: C.accent }}>✨ </span>{heroReason}</div>}
+                      {heroWhy.length > 0 && <div style={{ fontSize: 13.5, color: C.light, lineHeight: 1.5, marginTop: 10 }}><span style={{ color: C.accent, fontWeight: 800 }}>Why · </span>{heroWhy.slice(0, 4).join(" · ")}</div>}
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 10, padding: "0 16px 16px" }}>
@@ -2800,9 +2814,10 @@ function PageInner() {
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
                     {foryouEvents.slice(0, 6).map((e) => {
                       const f = formatEventDate(e.date, e.time);
+                      const evRel = (() => { if (!e.date) return null; const ed = new Date(e.date + "T00:00:00"); const t0 = new Date(); t0.setHours(0, 0, 0, 0); const diff = Math.round((ed - t0) / 86400000); if (diff <= 0) return "Tonight"; if (diff === 1) return "Tomorrow"; if (diff <= 6 && (ed.getDay() === 6 || ed.getDay() === 0)) return "This weekend"; return null; })();
                       return (
                         <div key={e.id} onClick={() => openVenue(e)} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 9, cursor: "pointer", minWidth: 0 }}>
-                          <div style={{ fontSize: 10, fontWeight: 800, color: C.purple, marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.mo} {f.day}{f.time ? " · " + f.time : ""}</div>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: evRel ? C.accent : C.purple, marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{evRel ? evRel.toUpperCase() : (f.mo + " " + f.day)}{f.time ? " · " + f.time : ""}</div>
                           <div style={{ fontSize: 12, fontWeight: 700, color: C.text, lineHeight: 1.25, marginBottom: 3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{e.name}</div>
                           <div style={{ fontSize: 10, color: C.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>📍 {e.venue || e.city || "Nearby"}</div>
                         </div>
