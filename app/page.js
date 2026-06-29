@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v4.1";
+const BUILD = "v4.2";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -2679,8 +2679,13 @@ function PageInner() {
           // it does not reshuffle on you; tapping "another angle" cycles between
           // the two without refetching anything.
           const heroBucket = h < 11 ? 0 : h < 15 ? 1 : h < 17 ? 2 : h < 22 ? 3 : 4;
-          const heroOpenList = displayList.filter((p) => p && p.openNow !== false);
-          const heroBase = heroOpenList.length ? heroOpenList : displayList.filter(Boolean);
+          // Trust fix (v4.2): the hero must be somewhere you can actually go right now.
+          // Prefer places confirmed open; if none are confirmed open, fall back to
+          // unknown-status places; only if neither exists do we surface a closed place,
+          // and the badge below drops the "start here" promise in that case.
+          const heroOpenNow = displayList.filter((p) => p && p.openNow === true);
+          const heroUnknown = displayList.filter((p) => p && p.openNow == null);
+          const heroBase = heroOpenNow.length ? heroOpenNow : (heroUnknown.length ? heroUnknown : displayList.filter(Boolean));
           const heroTop = heroBase.length ? heroBase[0] : null;
           const heroGem = heroBase.length >= 3
             ? (heroBase.slice(2, 8).reduce((b, p) => (!b || (p.rating || 0) > (b.rating || 0) ? p : b), null) || heroBase[2])
@@ -2692,6 +2697,15 @@ function PageInner() {
           const heroHook = heroPick ? hookCards.find((hk) => hk && hk.placeId === heroPick.id) : null;
           const heroReason = heroPick ? ((heroHook && heroHook.hook) ? heroHook.hook : (blurbs[heroPick.id] || "")) : "";
           const heroIsGem = !!(heroPick && heroGem && heroPick.id === heroGem.id && (!heroTop || heroGem.id !== heroTop.id));
+          // Honest hero badge: only say "start here" when the place is genuinely open now.
+          // If it opens later today, set that expectation instead of implying it is ready.
+          // If status is unknown or it is closed, fall back to a neutral "top pick" label.
+          const heroOpenConfirmed = !!(heroPick && heroPick.openNow === true);
+          const heroOpensLater = !!(heroPick && heroPick.openNow === false && heroPick.nextOpen && heroPick.nextOpen.today);
+          let heroBadgeIcon = heroIsGem ? "💎" : "📍";
+          let heroBadgeText = heroIsGem ? "Hidden gem nearby" : "Top pick nearby";
+          if (heroOpenConfirmed) { heroBadgeIcon = heroIsGem ? "💎" : "✨"; heroBadgeText = heroIsGem ? "Hidden gem · open now" : "Start here · open now"; }
+          else if (heroOpensLater) { heroBadgeIcon = "⏳"; heroBadgeText = "Worth the wait · " + heroPick.nextOpen.label; }
           const feedList = heroPick ? displayList.filter((p) => p && p.id !== heroPick.id) : displayList;
           const homeFeed = sortBy === "near" ? [...feedList].sort((a, b) => (a.distMi ?? 1e12) - (b.distMi ?? 1e12)) : feedList;
           return (
@@ -2731,8 +2745,8 @@ function PageInner() {
                     <div style={{ position: "relative" }}>
                       <FallbackImg src={heroPick.photo} icon="📍" style={{ width: "100%", height: 185, objectFit: "cover", display: "block" }} />
                       <div style={{ position: "absolute", top: 12, left: 12, display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(0,0,0,.62)", border: `1px solid ${C.accent}80`, borderRadius: 999, padding: "5px 11px", backdropFilter: "blur(4px)" }}>
-                        <span style={{ fontSize: 12 }}>{heroIsGem ? "💎" : "✨"}</span>
-                        <span style={{ fontSize: 10, fontWeight: 800, color: C.accent, textTransform: "uppercase", letterSpacing: "0.7px" }}>{heroIsGem ? "Hidden gem for right now" : "Start here · " + moment + " pick"}</span>
+                        <span style={{ fontSize: 12 }}>{heroBadgeIcon}</span>
+                        <span style={{ fontSize: 10, fontWeight: 800, color: C.accent, textTransform: "uppercase", letterSpacing: "0.7px" }}>{heroBadgeText}</span>
                       </div>
                     </div>
                     <div style={{ padding: 16 }}>
