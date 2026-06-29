@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v4.5";
+const BUILD = "v4.6";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -2714,16 +2714,16 @@ function PageInner() {
           let heroBadgeText = heroIsGem ? "Hidden gem nearby" : "Top pick nearby";
           if (heroOpenConfirmed) { heroBadgeIcon = heroIsGem ? "💎" : "✨"; heroBadgeText = heroIsGem ? "Hidden gem · open now" : "Open now"; }
           else if (heroOpensLater) { heroBadgeIcon = "⏳"; heroBadgeText = "Worth the wait · " + heroPick.nextOpen.label; }
-          // v4.5: a crisp, always-true reason line so the hero reads as a decision, not a listing.
-          const whyTime = h < 11 ? "a morning start" : h < 15 ? "lunch" : h < 17 ? "the afternoon" : h < 22 ? "tonight" : "a late one";
+          // v4.6: tighter, more confident reason line. Drops the rating parenthetical and the
+          // distance (both already shown above) and sharpens the weather and time fragments.
+          const whyPick = h < 11 ? "morning" : h < 15 ? "lunch" : h < 17 ? "afternoon" : h < 22 ? "evening" : "late-night";
           const heroWhy = [];
           if (heroPick) {
             if (heroOpenConfirmed) heroWhy.push("open now");
-            if (heroPick.rating != null && heroPick.rating >= 4.5) heroWhy.push("loved locally (" + heroPick.rating + "★)");
+            if (heroPick.rating != null && heroPick.rating >= 4.5) heroWhy.push("loved locally");
             else if (heroSl && heroSl.word) heroWhy.push(heroSl.word.toLowerCase() + " rated");
-            if (weather && weather.temp != null && weather.temp >= 58 && weather.temp <= 92 && !(weather.label && /rain|storm|snow|sleet/i.test(weather.label))) heroWhy.push("nice out right now");
-            if (heroPick.distMi != null && heroPick.distMi <= 3) heroWhy.push("only " + heroPick.distMi.toFixed(1) + " mi");
-            heroWhy.push("good for " + whyTime);
+            if (weather && weather.temp != null && weather.temp >= 58 && weather.temp <= 92 && !(weather.label && /rain|storm|snow|sleet/i.test(weather.label))) heroWhy.push("great weather match");
+            heroWhy.push("strong " + whyPick + " pick");
           }
           const feedList = heroPick ? displayList.filter((p) => p && p.id !== heroPick.id) : displayList;
           // Trust fix (v4.3): closed places no longer hold the top slots. Sort by the
@@ -2761,11 +2761,13 @@ function PageInner() {
                     </button>
                   )}
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
-                  <CleanTile onClick={openSurprise} color={C.border} labelColor={C.text} icon="🎁" label="Surprise Me" />
-                  <CleanTile onClick={() => setMenuSheet("explore")} color={C.border} labelColor={C.text} icon="📍" label="Nearby" />
-                  <CleanTile onClick={() => setMenuSheet("experiences")} color={C.border} labelColor={C.text} icon="✨" label="Occasions" />
-                  <CleanTile onClick={() => setMenuSheet("community")} color={C.border} labelColor={C.text} icon="📚" label="Local Events" />
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", WebkitOverflowScrolling: "touch", paddingBottom: 2 }}>
+                  {[{ icon: "🎁", label: "Surprise", go: openSurprise }, { icon: "📍", label: "Nearby", go: () => setMenuSheet("explore") }, { icon: "✨", label: "Occasions", go: () => setMenuSheet("experiences") }, { icon: "📚", label: "Local Events", go: () => setMenuSheet("community") }].map((t) => (
+                    <button key={t.label} onClick={t.go} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 999, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+                      <span style={{ fontSize: 15, lineHeight: 1 }}>{t.icon}</span>
+                      {t.label}
+                    </button>
+                  ))}
                 </div>
               </div>
               {!suggestedLoading && suggested !== null && heroPick && (
@@ -2792,7 +2794,7 @@ function PageInner() {
                         {heroPick.openNow === false && <span style={{ fontSize: 12, fontWeight: 700, color: heroPick.nextOpen && heroPick.nextOpen.today ? C.gold : C.red }}>· {heroPick.nextOpen && heroPick.nextOpen.today ? heroPick.nextOpen.label : "Closed"}</span>}
                         {heroPick.distMi != null && <span style={{ fontSize: 12, color: C.muted }}>· {heroPick.distMi.toFixed(1)} mi</span>}
                       </div>
-                      {heroWhy.length > 0 && <div style={{ fontSize: 13.5, color: C.light, lineHeight: 1.5, marginTop: 10 }}><span style={{ color: C.accent, fontWeight: 800 }}>Why · </span>{heroWhy.slice(0, 4).join(" · ")}</div>}
+                      {heroWhy.length > 0 && <div style={{ fontSize: 13.5, color: C.light, lineHeight: 1.5, marginTop: 10 }}><span style={{ color: C.accent, fontWeight: 800 }}>Why: </span>{heroWhy.slice(0, 4).join(" · ")}</div>}
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 10, padding: "0 16px 16px" }}>
@@ -2937,12 +2939,19 @@ function PageInner() {
           const p = surprisePick;
           const sl = p ? scoreLabel(p.wfScore) : null;
           const badges = p ? experienceBadges(p) : [];
+          // v4.6: capitalized identity + state-aware subtitle so a closed pick is never framed as "right now".
+          const period = (() => { const hr = new Date().getHours(); return hr < 12 ? "Morning" : hr < 17 ? "Afternoon" : "Evening"; })();
+          const sOpen = !!(p && p.openNow === true);
+          const sOpensLater = !!(p && p.openNow === false && p.nextOpen && p.nextOpen.today);
+          const sSub = sOpen ? "Open now, nearby, and worth your time."
+            : sOpensLater ? (p.nextOpen.label + " · a strong pick for a little later.")
+            : "A top pick nearby, chosen for rating, distance, and fit.";
           return (
             <div>
               <div onClick={() => setScreen("explore")} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: C.accent, fontWeight: 700, fontSize: 13, cursor: "pointer", padding: "4px 2px 10px" }}>‹ Back</div>
               <div style={{ paddingBottom: 6 }}>
-                <div style={{ fontSize: 24, fontWeight: 800, color: C.text }}>✨ {greetingText().replace("Good ", "")} pick</div>
-                <div style={{ fontSize: 13, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>One standout for right now, chosen from what is open, close, highly rated, and right for the time of day.</div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: C.text }}>✨ Your {period} Pick</div>
+                <div style={{ fontSize: 13, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>{sSub}</div>
               </div>
               {surpriseLoading && <Loader label="Finding something good" pad="16px 2px" />}
               {!surpriseLoading && !p && (
@@ -2977,31 +2986,52 @@ function PageInner() {
                       {blurbs[p.id] && <div style={{ fontSize: 13, color: C.light, lineHeight: 1.45, marginTop: 10 }}><span style={{ color: C.accent }}>✨ </span>{blurbs[p.id]}</div>}
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-                    <button onClick={() => openDetail(p)} style={{ flex: 1, background: C.accent, color: "#0D1117", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 800, padding: "13px 0", cursor: "pointer" }}>See full details</button>
-                    <button onClick={() => setSurprisePick(pickSurprise(surprisePool))} style={{ flex: 1, background: "transparent", color: C.accent, border: `1.5px solid ${C.accent}`, borderRadius: 12, fontSize: 14, fontWeight: 800, padding: "13px 0", cursor: "pointer" }}>✨ Try another</button>
+                  <button onClick={() => { if (p.mapsUrl) window.open(p.mapsUrl, "_blank", "noopener"); else openDetail(p); }} style={{ width: "100%", marginTop: 12, background: C.accent, color: "#0D1117", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 800, padding: "14px 0", cursor: "pointer" }}>Take me there →</button>
+                  <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+                    <button onClick={() => openDetail(p)} style={{ flex: 1, background: "transparent", color: C.light, border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 13.5, fontWeight: 700, padding: "12px 0", cursor: "pointer" }}>See details</button>
+                    <button onClick={() => setSurprisePick(pickSurprise(surprisePool))} style={{ flex: 1, background: "transparent", color: C.accent, border: `1.5px solid ${C.accent}`, borderRadius: 12, fontSize: 13.5, fontWeight: 800, padding: "12px 0", cursor: "pointer" }}>✨ Try another</button>
                   </div>
-                  {/* Other picks — fills the screen and adds discovery */}
-                  {surprisePool.filter((o) => o && o.id !== p.id).length > 0 && (
-                    <div style={{ marginTop: 22 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, letterSpacing: "0.3px", textTransform: "uppercase", marginBottom: 10 }}>Other great picks nearby</div>
-                      {surprisePool.filter((o) => o && o.id !== p.id).slice(0, 4).map((other) => (
-                        <div key={other.id} onClick={() => setSurprisePick(other)} style={{ display: "flex", alignItems: "center", gap: 12, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 12px", marginBottom: 8, cursor: "pointer" }}>
-                          <FallbackImg src={other.photo} icon="🍽️" style={{ width: 52, height: 52, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 14, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{other.name}</div>
-                            <div style={{ display: "flex", gap: 6, marginTop: 3, alignItems: "center", flexWrap: "wrap" }}>
-                              {other.rating && <span style={{ fontSize: 12, color: "#F59E0B" }}>★ {other.rating}</span>}
-                              {other.distMi != null && <span style={{ fontSize: 12, color: C.muted }}>· {other.distMi.toFixed(1)} mi</span>}
-                              {other.openNow === true && <span style={{ fontSize: 11, fontWeight: 600, color: C.green }}>Open</span>}
-                              {other.openNow === false && <span style={{ fontSize: 11, fontWeight: 600, color: C.red }}>Closed</span>}
+                  {/* v4.6: backup picks split into Open now and For later so closed spots are labeled, not hidden in prime slots. */}
+                  {(() => {
+                    const others = surprisePool.filter((o) => o && o.id !== p.id);
+                    const openG = others.filter((o) => o.openNow === true).slice(0, 3);
+                    const laterG = others.filter((o) => o.openNow === false).slice(0, 3);
+                    if (!openG.length && !laterG.length) return null;
+                    return (
+                      <div style={{ marginTop: 22, paddingBottom: 8 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, letterSpacing: "0.3px", textTransform: "uppercase", marginBottom: 10 }}>Backup picks</div>
+                        {openG.length > 0 && <div style={{ fontSize: 11, fontWeight: 800, color: C.green, textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 7 }}>Open now</div>}
+                        {openG.map((other) => (
+                          <div key={other.id} onClick={() => setSurprisePick(other)} style={{ display: "flex", alignItems: "center", gap: 12, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 12px", marginBottom: 8, cursor: "pointer" }}>
+                            <FallbackImg src={other.photo} icon="🍽️" style={{ width: 52, height: 52, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 14, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{other.name}</div>
+                              <div style={{ display: "flex", gap: 6, marginTop: 3, alignItems: "center", flexWrap: "wrap" }}>
+                                {other.rating && <span style={{ fontSize: 12, color: "#F59E0B" }}>★ {other.rating}</span>}
+                                {other.distMi != null && <span style={{ fontSize: 12, color: C.muted }}>· {other.distMi.toFixed(1)} mi</span>}
+                              </div>
                             </div>
+                            <span style={{ color: C.muted, fontSize: 18, flexShrink: 0 }}>›</span>
                           </div>
-                          <span style={{ color: C.muted, fontSize: 18, flexShrink: 0 }}>›</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                        {laterG.length > 0 && <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: "0.4px", margin: "12px 0 7px" }}>For later</div>}
+                        {laterG.map((other) => (
+                          <div key={other.id} onClick={() => setSurprisePick(other)} style={{ display: "flex", alignItems: "center", gap: 12, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 12px", marginBottom: 8, cursor: "pointer", opacity: 0.82 }}>
+                            <FallbackImg src={other.photo} icon="🍽️" style={{ width: 52, height: 52, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 14, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{other.name}</div>
+                              <div style={{ display: "flex", gap: 6, marginTop: 3, alignItems: "center", flexWrap: "wrap" }}>
+                                {other.rating && <span style={{ fontSize: 12, color: "#F59E0B" }}>★ {other.rating}</span>}
+                                {other.distMi != null && <span style={{ fontSize: 12, color: C.muted }}>· {other.distMi.toFixed(1)} mi</span>}
+                                <span style={{ fontSize: 11, fontWeight: 600, color: C.gold }}>{other.nextOpen && other.nextOpen.today ? other.nextOpen.label : "Opens later"}</span>
+                              </div>
+                            </div>
+                            <span style={{ color: C.muted, fontSize: 18, flexShrink: 0 }}>›</span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
