@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v1.1";
+const BUILD = "v1.3";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -1302,6 +1302,8 @@ function PageInner() {
   const tokenRef = useRef(null);
   const insightCache = useRef({});
   const scrollRef = useRef(null);
+  const detailSheetRef = useRef(null);
+  const sheetDragRef = useRef({});
   const insightFullCache = useRef({});
   const detailCache = useRef({});
   // Engagement signals — stored in localStorage, used to personalise the feed.
@@ -1552,6 +1554,83 @@ function PageInner() {
       } else showToast("Could not find this venue");
     } catch { showToast("Could not load venue details"); }
   }
+
+  // Swipe down to close the detail sheet. Engages only when the content is at the
+  // top and the pull is clearly downward, so vertical scrolling and the horizontal
+  // photo gallery keep working. Tapping Close still works as before.
+  function sheetTouchStart(e) {
+    const el = detailSheetRef.current;
+    const t = e.touches[0];
+    sheetDragRef.current = { y0: t.clientY, x0: t.clientX, atTop: el ? el.scrollTop <= 0 : true, active: true, decided: false, dragging: false, dy: 0 };
+    if (el) el.style.transition = "none";
+  }
+  function sheetTouchMove(e) {
+    const d = sheetDragRef.current;
+    if (!d || !d.active) return;
+    const dy = e.touches[0].clientY - d.y0;
+    const dx = e.touches[0].clientX - d.x0;
+    if (!d.decided) {
+      if (Math.abs(dy) < 8 && Math.abs(dx) < 8) return;
+      d.decided = true;
+      d.dragging = d.atTop && dy > 0 && Math.abs(dy) > Math.abs(dx);
+      if (!d.dragging) { d.active = false; return; }
+    }
+    if (d.dragging && dy > 0) {
+      d.dy = dy;
+      const el = detailSheetRef.current;
+      if (el) el.style.transform = "translateY(" + dy + "px)";
+    }
+  }
+  function sheetTouchEnd() {
+    const d = sheetDragRef.current;
+    const el = detailSheetRef.current;
+    if (el) el.style.transition = "transform .25s ease";
+    if (d && d.dragging && d.dy > 110) {
+      if (el) el.style.transform = "translateY(100%)";
+      setTimeout(() => setDetail(null), 180);
+    } else if (el) {
+      el.style.transform = "translateY(0px)";
+    }
+    sheetDragRef.current = {};
+  }
+
+  // Swipe in from the left edge to go back: dismisses whatever is open (sheet,
+  // preview, detail) or steps a sub-screen back to Explore. Listeners are passive,
+  // so it never blocks scrolling, the photo gallery, or the map; it is gated to the
+  // left edge and a clear rightward motion to avoid misfires; and it does nothing
+  // when there is nothing to back out of. A latest-value ref keeps state current.
+  const goBackRef = useRef(null);
+  goBackRef.current = () => {
+    if (lightbox) { setLightbox(null); return; }
+    if (allExpOpen) { setAllExpOpen(false); return; }
+    if (newListOpen) { setNewListOpen(false); return; }
+    if (authOpen) { setAuthOpen(false); return; }
+    if (accountOpen) { setAccountOpen(false); return; }
+    if (saveTarget) { setSaveTarget(null); return; }
+    if (menuSheet) { setMenuSheet(null); return; }
+    if (detail) { setDetail(null); return; }
+    if (mapPreview) { setMapPreview(null); return; }
+    if (activeList) { setActiveList(null); return; }
+    if (screen === "surprise" || screen === "experience") { setScreen("explore"); return; }
+  };
+  useEffect(() => {
+    let sx = 0, sy = 0, edge = false, decided = false, fire = false;
+    function ts(e) { const t = e.touches && e.touches[0]; if (!t) return; sx = t.clientX; sy = t.clientY; edge = t.clientX <= 24; decided = false; fire = false; }
+    function tm(e) {
+      if (!edge) return;
+      const t = e.touches && e.touches[0]; if (!t) return;
+      const dx = t.clientX - sx, dy = t.clientY - sy;
+      if (!decided) { if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return; decided = true; fire = dx > 0 && Math.abs(dx) > Math.abs(dy) * 1.3; }
+    }
+    function te(e) {
+      if (edge && fire) { const t = e.changedTouches && e.changedTouches[0]; const dx = t ? t.clientX - sx : 0; if (dx > 70 && goBackRef.current) goBackRef.current(); }
+      edge = false; decided = false; fire = false;
+    }
+    document.addEventListener("touchstart", ts, { passive: true });
+    document.addEventListener("touchmove", tm, { passive: true });
+    document.addEventListener("touchend", te, { passive: true });
+    return () => { document.removeEventListener("touchstart", ts); document.removeEventListener("touchmove", tm); document.removeEventListener("touchend", te); };
+  }, []);
 
   function shareApp() {
     const url = (typeof window !== "undefined" && window.location && window.location.origin) ? window.location.origin : "https://wayfind-xi.vercel.app";
@@ -3428,7 +3507,7 @@ function PageInner() {
       {/* Detail sheet */}
       {detail && (
         <div style={sheetBg} onClick={() => setDetail(null)}>
-          <div style={sheet} onClick={(e) => e.stopPropagation()}>
+          <div ref={detailSheetRef} style={{ ...sheet, overscrollBehaviorY: "contain" }} onClick={(e) => e.stopPropagation()} onTouchStart={sheetTouchStart} onTouchMove={sheetTouchMove} onTouchEnd={sheetTouchEnd}>
             <div style={{ position: "sticky", top: 0, zIndex: 5, background: C.panel, padding: "10px 12px", paddingTop: "max(10px, env(safe-area-inset-top))", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${C.border}` }}>
               <button onClick={() => { logEvent("share", detail, { kind: "place" }); shareLink(detail.name, originUrl("/?place=" + encodeURIComponent(detail.id)), () => showToast("Link copied"), `Want to go to ${detail.name} together? Found it on Wayfind`); }} style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 38, padding: "0 16px", borderRadius: 19, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Share spot</button>
               <button onClick={() => quickSaveFavorite(detail)} style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 38, padding: "0 16px", borderRadius: 19, border: `1px solid ${isSaved(detail.id) ? C.accent : C.border}`, background: isSaved(detail.id) ? C.adim : C.card, color: isSaved(detail.id) ? C.accent : C.text, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{isSaved(detail.id) ? "✓ Saved" : "❤️ Save"}</button>
