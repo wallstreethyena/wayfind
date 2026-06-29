@@ -424,6 +424,18 @@ async function fromLibCal(lat, lng) {
   } catch { return { configured: true, events: [] }; }
 }
 
+// Pull a 2-letter US state out of a "City, ST" style string. Used to keep
+// coordinate-less event results (Google) in the user's own region.
+function stateOf(s) {
+  if (!s) return "";
+  const parts = String(s).split(",").map((x) => x.trim()).filter(Boolean);
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const m = parts[i].match(/^([A-Za-z]{2})$/);
+    if (m) return m[1].toUpperCase();
+  }
+  return "";
+}
+
 export async function POST(req) {
   try {
     const { lat, lng, keyword, radius, city } = await req.json();
@@ -443,6 +455,17 @@ export async function POST(req) {
     if (configuredCount === 0) return Response.json({ unavailable: true, events: [], sources: [] }, { status: 200 });
 
     let merged = dedupe(results.flatMap((r) => r.events || []));
+    // Proximity guard: tiny towns make the city-string event search (Google) return
+    // far, national results, e.g. California events for a Florida user. Drop anything
+    // clearly outside the user's region before ranking. Coord-bearing events must be
+    // within range; coord-less ones (Google) must at least share the user's state.
+    const userState = stateOf(city);
+    const maxMi = Math.max((Number(radius) || 60) * 2, 75);
+    merged = merged.filter((e) => {
+      if (e.lat != null && e.lng != null) return haversineMi(lat, lng, e.lat, e.lng) <= maxMi;
+      const es = stateOf(e.city);
+      return userState && es ? es === userState : false;
+    });
     merged = merged.filter((e) => e.date).sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || ""))).slice(0, 90);
 
     const labels = ["Ticketmaster", "SeatGeek", "PredictHQ", "Bandsintown", "Google", "Google", "Manatee County Library"];
