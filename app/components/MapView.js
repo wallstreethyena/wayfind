@@ -74,13 +74,16 @@ export default function MapView({ places, center, category, deviceLoc, onSelect,
     if (!map || !window.google) return;
     markersRef.current.forEach((m) => m.setMap(null));
     markersRef.current = [];
-    // Ranks 1 to 5 keep the medal colors; everything else is one consistent
-    // color (no per-category coloring), so the medal system stays the signal.
+    // v4.4: simplified pin colors. Rank still reads through SIZE (below), so color
+    // carries just three signals: gold = the #1 pick, blue = other open spots, gray =
+    // closed right now, so closed places recede on the map too. The orange teardrop is
+    // reserved for the user's own location and purple for event venues.
     const REST = "#4C8DFF";
+    const CLOSED = "#5B6675";
     const bounds = new window.google.maps.LatLngBounds();
 
     (places || []).forEach((p, i) => {
-      const fill = medalColor(i) || REST;
+      const fill = p.openNow === false ? CLOSED : (i === 0 ? "#FBBF24" : REST);
       const s = i === 0 ? 50 : i === 1 ? 45 : i === 2 ? 41 : i <= 4 ? 37 : 32;
       const w = Math.round((s * 34) / 44);
       const marker = new window.google.maps.Marker({
@@ -125,10 +128,10 @@ export default function MapView({ places, center, category, deviceLoc, onSelect,
         center: { lat: center.lat, lng: center.lng },
         radius: 14000,
         strokeColor: "#F97316",
-        strokeOpacity: 0.55,
-        strokeWeight: 2,
+        strokeOpacity: 0.22,
+        strokeWeight: 1,
         fillColor: "#F97316",
-        fillOpacity: 0.05,
+        fillOpacity: 0.03,
         clickable: false,
       });
     }

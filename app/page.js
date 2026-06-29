@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v4.3";
+const BUILD = "v4.4";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -507,6 +507,18 @@ function SheetHero({ icon, title, subtitle, color }) {
       {subtitle && <div style={{ fontSize: 13, color: C.muted, marginTop: 4, lineHeight: 1.45 }}>{subtitle}</div>}
     </div>
   );
+}
+
+// v4.4: flat line nav icons in the Wayfind language — no emoji, no red heart. Each takes
+// the active or inactive color so the bar stays on-brand and consistent at any state.
+function NavIcon({ name, color, size }) {
+  const sz = size || 23;
+  const p = { width: sz, height: sz, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
+  if (name === "home") return (<svg {...p}><path d="M4 12 L12 4.5 L20 12" /><path d="M6 10.5 V19.5 H18 V10.5" /><path d="M10 19.5 V14 H14 V19.5" /></svg>);
+  if (name === "events") return (<svg {...p}><rect x="3" y="7" width="18" height="10" rx="2.5" /><path d="M14 7 V17" strokeDasharray="1.6 2.2" /></svg>);
+  if (name === "map") return (<svg {...p}><path d="M9 4.5 L3 7 V19.5 L9 17 L15 19.5 L21 17 V4.5 L15 7 L9 4.5 Z" /><path d="M9 4.5 V17" /><path d="M15 7 V19.5" /></svg>);
+  if (name === "saved") return (<svg {...p}><path d="M12 20 C12 20 4 14.6 4 9.2 C4 6.4 6.1 4.3 8.6 4.3 C10.3 4.3 11.5 5.4 12 6.5 C12.5 5.4 13.7 4.3 15.4 4.3 C17.9 4.3 20 6.4 20 9.2 C20 14.6 12 20 12 20 Z" /></svg>);
+  return null;
 }
 
 // Branded loading indicator: the Wayfind pin, gently pulsing.
@@ -2560,19 +2572,15 @@ function PageInner() {
       {/* Category tabs (Explore + Map). Hidden on home, where the app-tile grid replaces it. */}
       {screen !== "saved" && screen !== "shared" && screen !== "events" && screen !== "experience" && screen !== "surprise" && screen !== "suggested" && (
         screen === "map" ? (
-          /* v3.8: on the Map, categories render as compact 4-across tiles like home. Taps filter pins without leaving the map. */
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 7, padding: "10px 14px", background: C.panel, flexShrink: 0 }}>
-            <button key="surprise" onClick={openSurprise} style={{ minHeight: 56, borderRadius: 12, border: `1.5px solid ${C.purple}`, background: "transparent", color: C.purple, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, padding: "6px 4px" }}>
-              <span style={{ fontSize: 18, lineHeight: 1 }}>🎁</span>
-              <span style={{ fontSize: 10.5, fontWeight: 800 }}>Surprise</span>
-            </button>
+          /* v4.4: map categories as one horizontal scrollable chip row, so the map gets the height. */
+          <div style={{ display: "flex", gap: 8, padding: "8px 12px", background: C.panel, flexShrink: 0, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
             {CATEGORIES.map((c) => {
               const cc = CAT_COLOR[c.id] || { c: C.accent, dim: C.adim };
               const on = cat === c.id;
               return (
-                <button key={c.id} onClick={() => { setCat(c.id); setSub("all"); setVibe("all"); setQuickFilter(null); setSearchMode(false); setSearchLabel(""); }} style={{ minHeight: 56, borderRadius: 12, border: `1.5px solid ${on ? cc.c : C.border}`, background: on ? cc.dim : "transparent", color: on ? cc.c : C.light, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, padding: "6px 4px" }}>
-                  <span style={{ fontSize: 18, lineHeight: 1 }}>{CAT_ICONS[c.id] || "📍"}</span>
-                  <span style={{ fontSize: 10.5, fontWeight: on ? 800 : 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{c.label.replace(/^\S+\s/, "")}</span>
+                <button key={c.id} onClick={() => { setCat(c.id); setSub("all"); setVibe("all"); setQuickFilter(null); setSearchMode(false); setSearchLabel(""); }} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 999, border: `1.5px solid ${on ? cc.c : C.border}`, background: on ? cc.dim : "transparent", color: on ? cc.c : C.light, fontSize: 13, fontWeight: on ? 800 : 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+                  <span style={{ fontSize: 15, lineHeight: 1 }}>{CAT_ICONS[c.id] || "📍"}</span>
+                  {c.label.replace(/^\S+\s/, "")}
                 </button>
               );
             })}
@@ -2622,12 +2630,12 @@ function PageInner() {
               return (
                 <div style={{ position: "relative", width: "100%", height: "100%" }}>
                   <MapView places={mapMode === "events" ? [] : view} events={mapEvents} center={center} category={cat} deviceLoc={deviceLoc} onSelect={openDetail} onSelectEvent={openVenue} />
-                  <div style={{ position: "absolute", top: 12, left: 12, zIndex: 5, display: "flex", background: C.panel, border: `1px solid ${C.border}`, borderRadius: 999, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,.45)" }}>
+                  <div style={{ position: "absolute", top: 12, left: 12, zIndex: 5, display: "flex", background: "rgba(22,27,34,.82)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: `1px solid ${C.border}`, borderRadius: 999, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,.45)" }}>
                     <button onClick={() => setMapMode("places")} style={{ padding: "7px 15px", fontSize: 13, fontWeight: 800, border: "none", cursor: "pointer", background: mapMode === "places" ? C.accent : "transparent", color: mapMode === "places" ? "#fff" : C.light }}>Places</button>
                     <button onClick={() => { setMapMode("events"); if (!events) loadEvents(); }} style={{ padding: "7px 15px", fontSize: 13, fontWeight: 800, border: "none", cursor: "pointer", background: mapMode === "events" ? C.accent : "transparent", color: mapMode === "events" ? "#fff" : C.light }}>🎟️ Events</button>
                   </div>
                   {mapMode === "events" && (
-                    <div style={{ position: "absolute", left: 0, right: 0, bottom: 12, zIndex: 5, padding: "0 12px" }}>
+                    <div style={{ position: "absolute", left: 0, right: 0, bottom: 26, zIndex: 5, padding: "0 12px" }}>
                       {!eventsLoading && !eventsUnavailable && (
                         <div style={{ fontSize: 11.5, color: "#fff", fontWeight: 700, textAlign: "center", marginBottom: 6, textShadow: "0 1px 4px rgba(0,0,0,.8)" }}>{mapEvents.length} venue{mapEvents.length === 1 ? "" : "s"}{mapDate === "all" ? " coming up" : " that day"}</div>
                       )}
@@ -2641,7 +2649,7 @@ function PageInner() {
                     </div>
                   )}
                   {mapMode === "places" && subs.length > 0 && (
-                    <div style={{ position: "absolute", left: 0, right: 0, bottom: 12, zIndex: 5, padding: "0 12px" }}>
+                    <div style={{ position: "absolute", left: 0, right: 0, bottom: 26, zIndex: 5, padding: "0 12px" }}>
                       <div style={{ display: "flex", gap: 6, overflowX: "auto", background: "rgba(13,17,23,.92)", border: `1px solid ${C.border}`, borderRadius: 14, padding: 8, WebkitOverflowScrolling: "touch" }}>
                         {subs.map((s) => (
                           <button key={s.id} onClick={() => pickSub(s.id)} style={{ flexShrink: 0, padding: "7px 14px", borderRadius: 10, border: "none", cursor: "pointer", background: sub === s.id ? C.accent : "transparent", color: sub === s.id ? "#fff" : C.light, fontSize: 12.5, fontWeight: 700, whiteSpace: "nowrap" }}>{s.label}</button>
@@ -3253,12 +3261,12 @@ function PageInner() {
 
       {/* Bottom nav */}
       <div style={{ background: C.panel, borderTop: `1px solid ${C.border}`, display: "flex", flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom)" }}>
-        {[{ id: "home", icon: "🏠", label: "Home" }, { id: "events", icon: "🎟️", label: "Events" }, { id: "map", icon: "🗺️", label: "Map" }, { id: "saved", icon: "❤️", label: "Favorites" }].map((s) => {
+        {[{ id: "home", icon: "home", label: "Home" }, { id: "events", icon: "events", label: "Events" }, { id: "map", icon: "map", label: "Map" }, { id: "saved", icon: "saved", label: "Favorites" }].map((s) => {
           const active = (s.id === "home" && (screen === "suggested" || screen === "explore" || screen === "experience" || screen === "surprise")) || s.id === screen;
           return (
           <button key={s.id} onClick={() => { setActiveList(null); if (s.id === "home") { openSuggested(); } else { setScreen(s.id); } }} style={{ flex: 1, padding: "12px 8px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "transparent", border: "none", cursor: "pointer" }}>
-            <span style={{ fontSize: 24, opacity: active ? 1 : 0.85 }}>{s.icon}</span>
-            <span style={{ fontSize: 11, fontWeight: 600, color: active ? C.accent : C.muted }}>{s.label}</span>
+            <NavIcon name={s.icon} color={active ? C.accent : C.muted} />
+            <span style={{ fontSize: 11, fontWeight: active ? 700 : 600, color: active ? C.accent : C.muted }}>{s.label}</span>
           </button>
           );
         })}
