@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v2.1";
+const BUILD = "v2.2";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -1253,6 +1253,7 @@ function PageInner() {
   const [mapMode, setMapMode] = useState("places");
   const [mapDate, setMapDate] = useState("all");
   const [mapPreview, setMapPreview] = useState(null);
+  const [eventPreview, setEventPreview] = useState(null);
   const [weather, setWeather] = useState(null);
   const [suggested, setSuggested] = useState(null);
   const [suggestedLoading, setSuggestedLoading] = useState(false);
@@ -1278,6 +1279,7 @@ function PageInner() {
   const [surprisePick, setSurprisePick] = useState(null);
   const [surprisePool, setSurprisePool] = useState([]);
   const [surpriseLoading, setSurpriseLoading] = useState(false);
+  const diceRouteRef = useRef(false);
   const [toast, setToast] = useState("");
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(""), 1800); }
   const videoCache = useRef({});
@@ -1486,7 +1488,7 @@ function PageInner() {
       setRolling(false);
       setDiceFace("🎲");
       const pick = pool[Math.floor(Math.random() * pool.length)];
-      if (pick) openDetail(pick);
+      if (pick) { diceRouteRef.current = true; setSurprisePool(pool); setSurprisePick(pick); setScreen("surprise"); try { window.scrollTo(0, 0); } catch {} }
     }, 1000);
   }
   function rollDice() { setDiceChoose(true); }
@@ -1522,7 +1524,7 @@ function PageInner() {
       clearInterval(iv);
       setRolling(false);
       setDiceFace("🎲");
-      if (res.length) { const pick = res[Math.floor(Math.random() * res.length)]; openDetail(pick); }
+      if (res.length) { const pick = res[Math.floor(Math.random() * res.length)]; diceRouteRef.current = true; setSurprisePool(res); setSurprisePick(pick); setScreen("surprise"); try { window.scrollTo(0, 0); } catch {} }
       else showToast("Nothing found nearby, try another");
     }, 900);
   }
@@ -1618,7 +1620,7 @@ function PageInner() {
   // at changes — category, sub-filter, vibe, sort, intent, distance, or screen.
   // Without this, changing a filter leaves you stranded mid-list looking at
   // different content.
-  useEffect(() => { try { if (scrollRef.current) scrollRef.current.scrollTo({ top: 0 }); } catch (e) {} setMapPreview(null); }, [cat, sub, vibe, intent, searchRadius, screen, activeBadge]);
+  useEffect(() => { try { if (scrollRef.current) scrollRef.current.scrollTo({ top: 0 }); } catch (e) {} setMapPreview(null); setEventPreview(null); }, [cat, sub, vibe, intent, searchRadius, screen, activeBadge]);
   // Reset the explore list back to 5 whenever a new result set loads or search mode flips.
   useEffect(() => { setVisibleCount(5); }, [places, searchMode]);
   function pickSub(id) { setSub(id); setVibe("all"); }
@@ -1838,7 +1840,7 @@ function PageInner() {
     setBlurbs(seeded);
     // 2. Only fetch + generate for places NOT already cached, capped to the top few.
     //    A warm area adds nothing; a brand-new area pays once, then caches.
-    const need = list.filter((p) => !seeded[p.id]).slice(0, 6);
+    const need = list.filter((p) => !seeded[p.id]).slice(0, 3);
     if (!need.length) return;
     const enriched = await Promise.all(need.map(async (p) => {
       let extra = detailCache.current[p.id];
@@ -2029,6 +2031,7 @@ function PageInner() {
   // signals we actually have: time of day, open status, distance, review quality.
   useEffect(() => {
     if (screen !== "surprise" || !center) return;
+    if (diceRouteRef.current) { diceRouteRef.current = false; setSurpriseLoading(false); return; }
     let cancelled = false;
     (async () => {
       setSurpriseLoading(true);
@@ -2766,7 +2769,7 @@ function PageInner() {
               const tchip = (on) => ({ flexShrink: 0, minWidth: 44, padding: "5px 9px", borderRadius: 10, border: "none", cursor: "pointer", textAlign: "center", background: on ? C.accent : "transparent", color: on ? "#fff" : C.light, fontWeight: 700 });
               return (
                 <div style={{ position: "relative", width: "100%", height: "100%" }}>
-                  <MapView places={mapMode === "events" ? [] : view} events={mapEvents} center={center} category={cat} deviceLoc={deviceLoc} onSelect={(p) => setMapPreview(p)} onSelectEvent={openVenue} />
+                  <MapView places={mapMode === "events" ? [] : view} events={mapEvents} center={center} category={cat} deviceLoc={deviceLoc} onSelect={(p) => setMapPreview(p)} onSelectEvent={(e) => { setMapPreview(null); setEventPreview(e); }} />
                   <div style={{ position: "absolute", top: 12, left: 12, zIndex: 5, display: "flex", background: "rgba(22,27,34,.82)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: `1px solid ${C.border}`, borderRadius: 999, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,.45)" }}>
                     <button onClick={() => setMapMode("places")} style={{ padding: "7px 15px", fontSize: 13, fontWeight: 800, border: "none", cursor: "pointer", background: mapMode === "places" ? C.accent : "transparent", color: mapMode === "places" ? "#fff" : C.light }}>Places</button>
                     <button onClick={() => { setMapMode("events"); if (!events) loadEvents(); }} style={{ padding: "7px 15px", fontSize: 13, fontWeight: 800, border: "none", cursor: "pointer", background: mapMode === "events" ? C.accent : "transparent", color: mapMode === "events" ? "#fff" : C.light }}>🎟️ Events</button>
@@ -2832,6 +2835,26 @@ function PageInner() {
                             </div>
                           </div>
                           <button onClick={(ev) => { ev.stopPropagation(); setMapPreview(null); }} aria-label="Dismiss" style={{ position: "absolute", top: 7, right: 7, width: 24, height: 24, borderRadius: 999, border: "none", background: "rgba(0,0,0,.5)", color: "#fff", fontSize: 13, lineHeight: 1, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  {mapMode === "events" && eventPreview && (() => {
+                    const ev = eventPreview;
+                    const dl = ev.date ? (() => { try { return new Date(ev.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }); } catch { return ev.date; } })() : "";
+                    return (
+                      <div style={{ position: "absolute", left: 12, right: 12, bottom: 22, zIndex: 6 }}>
+                        <div style={{ position: "relative", background: C.panel, border: `1px solid ${C.border}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 10px 34px rgba(0,0,0,.6)" }}>
+                          <div onClick={() => openVenue(ev)} style={{ display: "flex", cursor: "pointer", minWidth: 0 }}>
+                            <FallbackImg src={ev.image} icon="🎫" style={{ width: 96, height: 96, objectFit: "cover", flexShrink: 0, display: "block" }} />
+                            <div style={{ padding: "10px 12px", minWidth: 0, flex: 1 }}>
+                              <div style={{ fontSize: 14.5, fontWeight: 800, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", paddingRight: 22 }}>{ev.name}</div>
+                              {(dl || ev.time) && <div style={{ fontSize: 11.5, fontWeight: 700, color: C.accent, marginTop: 4 }}>{dl}{ev.time ? " · " + ev.time : ""}</div>}
+                              {ev.venue && <div style={{ fontSize: 11.5, color: C.muted, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>📍 {ev.venue}</div>}
+                              <div style={{ fontSize: 11.5, fontWeight: 700, color: C.accent, marginTop: 5 }}>View venue →</div>
+                            </div>
+                          </div>
+                          <button onClick={(ev2) => { ev2.stopPropagation(); setEventPreview(null); }} aria-label="Dismiss" style={{ position: "absolute", top: 7, right: 7, width: 24, height: 24, borderRadius: 999, border: "none", background: "rgba(0,0,0,.5)", color: "#fff", fontSize: 13, lineHeight: 1, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>✕</button>
                         </div>
                       </div>
                     );

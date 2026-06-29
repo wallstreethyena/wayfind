@@ -17,7 +17,7 @@ export const metadata = {
     type: "website",
     images: [
       {
-        url: "/share-card.png?v=4",
+        url: "/share-card.png?v=5",
         width: 1200,
         height: 630,
         alt: "Wayfind",
@@ -28,7 +28,7 @@ export const metadata = {
     card: "summary_large_image",
     title: "Wayfind",
     description: "Find great things to do near you, right now.",
-    images: ["/share-card.png?v=4"],
+    images: ["/share-card.png?v=5"],
   },
 };
 

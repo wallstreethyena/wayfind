@@ -32,7 +32,7 @@ export async function generateMetadata({ searchParams }) {
     (n ? `${n} curated spots` : "Curated spots") +
     (loc ? ` in ${loc}` : "") +
     " · Tap to explore on Wayfind";
-  const og = "/share-card.png?v=4";
+  const og = "/share-card.png?v=5";
   return {
     metadataBase: new URL(SITE),
     title: `${t} · Wayfind`,
