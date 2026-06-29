@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v5.2";
+const BUILD = "v5.5";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -691,6 +691,43 @@ function whatToWear(p, weather) {
     else wx = `Comfortable ${temp}° out right now.`;
   }
   return { dress, wx };
+}
+
+// Category-aware version of the dress card. Keeps "what to wear" only where weather
+// or vibe actually matters (beach, outdoor, nightlife). For food it returns a useful
+// data-true line from price and meal type instead, since dress advice reads gimmicky
+// for a restaurant. Granular Google attributes (groups, cuisine) are not in our data,
+// so this stays honest rather than inventing "good for groups, burgers".
+function placeVibe(p, weather) {
+  if (!p) return null;
+  const cat = primaryCategory(p);
+  if (cat === "beach" || cat === "attractions" || cat === "nightlife") {
+    const w = whatToWear(p, weather);
+    return w ? { icon: "👕", title: "What to wear", body: w.dress + (w.wx ? " " + w.wx : "") } : null;
+  }
+  if (cat === "food") {
+    const t = ((p.type || "") + " " + (Array.isArray(p.types) ? p.types.join(" ") : "")).toLowerCase();
+    const pn = p.priceNum;
+    let lead = "";
+    if (/breakfast|brunch/.test(t)) lead = "Good for breakfast and brunch.";
+    else if (/coffee|cafe/.test(t)) lead = "An easy spot for coffee and a casual sit.";
+    else if (/bakery/.test(t)) lead = "A bakery, good for a quick grab or a treat.";
+    else if (/ice_cream|dessert|gelato|frozen_yogurt/.test(t)) lead = "A dessert stop.";
+    else if (/fast_food|meal_takeaway/.test(t)) lead = "Quick and casual.";
+    else if (pn === 4) lead = "An upscale spot for a special-occasion meal.";
+    else if (pn === 3) lead = "A nicer sit-down meal.";
+    else if (pn === 2) lead = "An easy meal out.";
+    else if (pn === 1) lead = "Casual and budget-friendly.";
+    else if (p.rating != null && p.rating >= 4.5) lead = "A consistently well-loved local spot.";
+    let extra = "";
+    if (/breakfast|brunch|coffee|cafe|bakery|ice_cream|dessert/.test(t)) {
+      if (pn === 4) extra = " On the upscale side.";
+      else if (pn === 1) extra = " Easy on the wallet.";
+    }
+    const body = (lead + extra).trim();
+    return body ? { icon: "🍽️", title: "Good to know", body } : null;
+  }
+  return null;
 }
 
 function todayHours(extra) {
@@ -2548,7 +2585,11 @@ function PageInner() {
               </div>
             )}
           </div>
-          <button onClick={submitSearch} style={{ background: C.accent, border: "none", borderRadius: 14, color: "#fff", fontSize: 14, fontWeight: 800, padding: "0 18px", cursor: "pointer", whiteSpace: "nowrap" }}>Wayfind It</button>
+          <button onClick={submitSearch} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 7, background: "linear-gradient(180deg, #FB923C 0%, #F97316 52%, #EA580C 100%)", border: "none", borderRadius: 14, color: "#fff", fontSize: 14, fontWeight: 800, padding: "0 14px", cursor: "pointer", whiteSpace: "nowrap", boxShadow: "0 4px 14px rgba(249,115,22,.45)" }}>
+            <svg width="13" height="16" viewBox="0 0 24 24" fill="#fff" aria-hidden="true" style={{ display: "block" }}><path fillRule="evenodd" clipRule="evenodd" d="M12 2C7.58 2 4 5.58 4 10c0 5.25 6.94 11.4 7.24 11.66a1.15 1.15 0 0 0 1.52 0C13.06 21.4 20 15.25 20 10c0-4.42-3.58-8-8-8Zm0 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z" /></svg>
+            Wayfind It
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: "block" }}><path d="M5 12h13M13 6l6 6-6 6" /></svg>
+          </button>
         </div>
       </div>
 
@@ -2617,6 +2658,16 @@ function PageInner() {
                     <button onClick={() => setMapMode("places")} style={{ padding: "7px 15px", fontSize: 13, fontWeight: 800, border: "none", cursor: "pointer", background: mapMode === "places" ? C.accent : "transparent", color: mapMode === "places" ? "#fff" : C.light }}>Places</button>
                     <button onClick={() => { setMapMode("events"); if (!events) loadEvents(); }} style={{ padding: "7px 15px", fontSize: 13, fontWeight: 800, border: "none", cursor: "pointer", background: mapMode === "events" ? C.accent : "transparent", color: mapMode === "events" ? "#fff" : C.light }}>🎟️ Events</button>
                   </div>
+                  {mapMode === "places" && (
+                    <div style={{ position: "absolute", top: 12, right: 12, zIndex: 5, background: "rgba(22,27,34,.82)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: `1px solid ${C.border}`, borderRadius: 12, padding: "8px 10px", boxShadow: "0 4px 16px rgba(0,0,0,.45)", display: "flex", flexDirection: "column", gap: 5 }}>
+                      {[["#FBBF24", "Top pick"], ["#4C8DFF", "Open"], ["#5B6675", "Closed"]].map((row) => (
+                        <div key={row[1]} style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                          <span style={{ width: 9, height: 9, borderRadius: "50%", background: row[0], flexShrink: 0, boxShadow: "0 0 0 1px rgba(0,0,0,.3)" }} />
+                          <span style={{ fontSize: 10.5, fontWeight: 700, color: C.light, whiteSpace: "nowrap" }}>{row[1]}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {mapMode === "events" && (
                     <div style={{ position: "absolute", left: 0, right: 0, bottom: 26, zIndex: 5, padding: "0 12px" }}>
                       {!eventsLoading && !eventsUnavailable && (
@@ -2769,8 +2820,8 @@ function PageInner() {
                     <div style={{ padding: 16 }}>
                       <div style={{ fontSize: 22, fontWeight: 800, color: C.text, lineHeight: 1.2 }}>{heroPick.name}</div>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                        {heroSl && <span style={{ fontSize: 20, fontWeight: 900, color: C.accent }}>{heroSl.s}</span>}
-                        {heroSl && <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{heroSl.word}</span>}
+                        {heroSl && <span style={{ fontSize: 14, fontWeight: 800, color: C.text }}>{heroSl.word}</span>}
+                        {heroSl && <span style={{ fontSize: 11.5, fontWeight: 700, color: C.muted }}>{heroSl.s}/10</span>}
                         {heroPick.rating && <span style={{ color: "#F59E0B", fontSize: 13 }}>★ {heroPick.rating}</span>}
                         {heroPick.reviews != null && <span style={{ fontSize: 12, color: C.muted }}>· {heroPick.reviews.toLocaleString()} reviews</span>}
                         {heroPick.openNow === true && <span style={{ fontSize: 12, fontWeight: 700, color: C.green }}>· Open now</span>}
@@ -2921,7 +2972,7 @@ function PageInner() {
         {screen === "surprise" && (() => {
           const p = surprisePick;
           const sl = p ? scoreLabel(p.wfScore) : null;
-          const badges = p ? experienceBadges(p) : [];
+          const badges = p ? experienceBadges(p).slice(0, 2) : [];
           // v4.6: capitalized identity + state-aware subtitle so a closed pick is never framed as "right now".
           const period = (() => { const hr = new Date().getHours(); return hr < 12 ? "Morning" : hr < 17 ? "Afternoon" : "Evening"; })();
           const sOpen = !!(p && p.openNow === true);
@@ -2964,14 +3015,14 @@ function PageInner() {
               )}
               {!surpriseLoading && p && (
                 <div>
-                  <div onClick={() => openDetail(p)} style={{ background: C.card, border: `1px solid ${C.accent}`, borderRadius: 16, overflow: "hidden", cursor: "pointer" }}>
-                    <FallbackImg src={p.photo} icon="🍽️" style={{ width: "100%", height: 200, objectFit: "cover", display: "block" }} />
+                  <div onClick={() => openDetail(p)} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, overflow: "hidden", cursor: "pointer" }}>
+                    <FallbackImg src={p.photo} icon="🍽️" style={{ width: "100%", height: 230, objectFit: "cover", display: "block" }} />
                     <div style={{ padding: 16 }}>
                       <div style={{ fontSize: 20, fontWeight: 800, color: C.text }}>{p.name}</div>
                       {p.address && <div style={{ fontSize: 12, color: C.muted, marginTop: 4, lineHeight: 1.4 }}>📍 {p.address}</div>}
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                        {sl && <span style={{ fontSize: 20, fontWeight: 900, color: C.accent }}>{sl.s}</span>}
-                        {sl && <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{sl.word}</span>}
+                        {sl && <span style={{ fontSize: 14, fontWeight: 800, color: C.text }}>{sl.word}</span>}
+                        {sl && <span style={{ fontSize: 11.5, fontWeight: 700, color: C.muted }}>{sl.s}/10</span>}
                         {p.rating && <span style={{ color: "#F59E0B", fontSize: 13 }}>★ {p.rating}</span>}
                         {p.openNow === true && <span style={{ fontSize: 12, fontWeight: 700, color: C.green }}>Open now</span>}
                         {p.openNow === false && <span style={{ fontSize: 12, fontWeight: 700, color: p.nextOpen && p.nextOpen.today ? C.gold : C.red }}>{p.nextOpen && p.nextOpen.today ? p.nextOpen.label : "Closed today"}</span>}
@@ -2995,7 +3046,7 @@ function PageInner() {
                     ) : (
                       <button onClick={() => openDetail(p)} style={{ flex: 1, background: "transparent", color: C.light, border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 13.5, fontWeight: 700, padding: "12px 0", cursor: "pointer" }}>See details</button>
                     )}
-                    <button onClick={() => setSurprisePick(pickSurprise(surprisePool))} style={{ flex: 1, background: "transparent", color: C.accent, border: `1.5px solid ${C.accent}`, borderRadius: 12, fontSize: 13.5, fontWeight: 800, padding: "12px 0", cursor: "pointer" }}>✨ Try another</button>
+                    <button onClick={() => setSurprisePick(pickSurprise(surprisePool))} style={{ flex: 1, background: "transparent", color: C.light, border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 13.5, fontWeight: 800, padding: "12px 0", cursor: "pointer" }}>✨ Try another</button>
                   </div>
                   {/* v4.6: backup picks split into Open now and For later so closed spots are labeled, not hidden in prime slots. */}
                   {(() => {
@@ -3376,10 +3427,10 @@ function PageInner() {
                 ))}
               </div>
 
-              {(() => { const w = whatToWear(detail, weather); if (!w) return null; return (
+              {(() => { const v = placeVibe(detail, weather); if (!v) return null; return (
                 <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: "12px 14px", marginBottom: 14 }}>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: C.text, marginBottom: 6 }}>👕 What to wear</div>
-                  <div style={{ fontSize: 13, color: C.light, lineHeight: 1.5 }}>{w.dress}{w.wx ? " " + w.wx : ""}</div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: C.text, marginBottom: 6 }}>{v.icon} {v.title}</div>
+                  <div style={{ fontSize: 13, color: C.light, lineHeight: 1.5 }}>{v.body}</div>
                 </div>
               ); })()}
 
