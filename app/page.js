@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v5.1";
+const BUILD = "v5.2";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -1867,7 +1867,7 @@ function PageInner() {
         const results = await searchPlaces(cat, sub, { lat: center.lat, lng: center.lng }, searchRadius, vibe);
         if (!cancelled) { setPlaces(results); loadBlurbs(results); }
       } catch (e) {
-        if (!cancelled) { setErr("Could not load places. Check your API key and that billing is enabled."); setPlaces([]); }
+        if (!cancelled) { setErr("We couldn't load spots right now. Try again in a moment."); setPlaces([]); }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -3241,10 +3241,10 @@ function PageInner() {
               {!eventsLoading && eventsUnavailable && <div style={{ color: C.muted, fontSize: 13, padding: "8px 2px" }}>Events are not turned on yet. Add a Ticketmaster key in Vercel to switch them on.</div>}
               {!eventsLoading && !eventsUnavailable && eventsError && (
                 <div style={{ textAlign: "center", padding: "40px 24px", color: C.muted }}>
-                  <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
-                  <strong style={{ display: "block", color: C.light }}>Could not reach the events service</strong>
-                  <span style={{ fontSize: 13 }}>The Ticketmaster key may be wrong or not active yet.</span>
-                  <div onClick={loadEvents} style={{ marginTop: 12, color: C.accent, fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Tap to retry ↻</div>
+                  <div style={{ fontSize: 40, marginBottom: 12 }}>🎟️</div>
+                  <strong style={{ display: "block", color: C.light }}>No events to show right now</strong>
+                  <span style={{ fontSize: 13 }}>Check back in a little while.</span>
+                  <div onClick={loadEvents} style={{ marginTop: 12, color: C.muted, fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Refresh ↻</div>
                 </div>
               )}
               {!eventsLoading && !eventsUnavailable && !eventsError && all.length === 0 && (
@@ -3328,7 +3328,7 @@ function PageInner() {
         <div style={sheetBg} onClick={() => setDetail(null)}>
           <div style={sheet} onClick={(e) => e.stopPropagation()}>
             <div style={{ position: "sticky", top: 0, zIndex: 5, background: C.panel, padding: "10px 12px", paddingTop: "max(10px, env(safe-area-inset-top))", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${C.border}` }}>
-              <button onClick={() => { logEvent("share", detail, { kind: "place" }); shareLink(detail.name, originUrl("/?place=" + encodeURIComponent(detail.id)), () => showToast("Link copied"), `Want to go to ${detail.name} together? Found it on Wayfind`); }} style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 38, padding: "0 16px", borderRadius: 19, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Share ↗</button>
+              <button onClick={() => { logEvent("share", detail, { kind: "place" }); shareLink(detail.name, originUrl("/?place=" + encodeURIComponent(detail.id)), () => showToast("Link copied"), `Want to go to ${detail.name} together? Found it on Wayfind`); }} style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 38, padding: "0 16px", borderRadius: 19, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Share spot</button>
               <button onClick={() => setDetail(null)} aria-label="Close" style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 38, padding: "0 16px", borderRadius: 19, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 14, fontWeight: 700, lineHeight: 1, cursor: "pointer" }}>✕ Close</button>
             </div>
             {detail.photos && detail.photos.length > 0 ? (
@@ -3447,7 +3447,12 @@ function PageInner() {
                   <span style={{ fontSize: 10.5, fontWeight: 800, color: C.accent, letterSpacing: "0.5px" }}>WHY WAYFIND PICKED IT</span>
                   {(() => { const sl = scoreLabel(detail.wfScore); return sl ? <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4 }}><span style={{ fontSize: 22, fontWeight: 900, color: C.accent, lineHeight: 1 }}>{sl.s}</span><span style={{ fontSize: 11, color: C.muted, fontWeight: 700 }}>/ 10</span></span> : null; })()}
                 </div>
-                <div style={{ fontSize: 13, color: C.text, lineHeight: 1.5, marginTop: 7 }}>High Wayfind Score based on rating, review volume, distance, and experience signals.</div>
+                <div style={{ fontSize: 13, color: C.text, lineHeight: 1.5, marginTop: 7 }}>{(() => {
+                  const lead = detail.rating != null && detail.rating >= 4.5 ? "A local favorite" : detail.rating != null && detail.rating >= 4 ? "A well-rated spot" : "A solid pick nearby";
+                  const rev = detail.reviews >= 1000 ? " with thousands of reviews" : detail.reviews >= 200 ? " with plenty of reviews" : "";
+                  const dist = detail.distMi == null ? "." : detail.distMi <= 5 ? ", and close by." : detail.distMi <= 20 ? ", an easy drive from you." : ", worth the trip.";
+                  return lead + rev + dist;
+                })()}</div>
                 <button onClick={() => setWhyOpen((o) => !o)} style={{ marginTop: 9, background: "transparent", border: `1px solid ${C.accent}`, color: C.accent, fontSize: 12, fontWeight: 800, borderRadius: 999, padding: "4px 12px", cursor: "pointer" }}>{whyOpen ? "Hide ▴" : "Why? ▾"}</button>
                 {whyOpen && (() => {
                   const sl = scoreLabel(detail.wfScore);
@@ -3493,7 +3498,7 @@ function PageInner() {
                 )}
                 {!insightLoading && insight && insight.unavailable && <div style={{ fontSize: 13, color: C.muted }}>The details above are live. AI tips are not turned on yet.</div>}
                 {!insightLoading && insight && insight.error && (
-                  <div onClick={() => { delete insightCache.current[detail.id]; loadInsight(detail, detailExtra); }} style={{ fontSize: 13, color: C.accent, cursor: "pointer", fontWeight: 600 }}>Could not load the tip. Tap to retry ↻</div>
+                  <div style={{ fontSize: 13, color: C.muted }}>The live details above are the key things to know here.</div>
                 )}
                 {!insightLoading && insight && !insight.unavailable && !insight.error && (() => {
                   const ins = insight || {};
@@ -3512,10 +3517,19 @@ function PageInner() {
                 })()}
               </div>
 
-              {/* 4. Actions */}
+              {/* 4. Actions — for a closed place the main action becomes Save, not "go now". */}
               <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-                <a href={detail.mapsUrl} target="_blank" rel="noreferrer" style={{ flex: 1, padding: 13, background: C.accent, borderRadius: 12, color: "#fff", fontSize: 15, fontWeight: 700, textDecoration: "none", textAlign: "center" }}>Open in Google Maps ↗</a>
-                <button onClick={() => { setDetail(null); setSaveTarget(detail); }} style={{ flex: 1, padding: 13, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>❤️ Favorite</button>
+                {detail.openNow === false ? (
+                  <>
+                    <button onClick={() => { setDetail(null); setSaveTarget(detail); }} style={{ flex: 1, padding: 13, background: C.accent, border: "none", borderRadius: 12, color: "#0D1117", fontSize: 15, fontWeight: 800, cursor: "pointer" }}>❤️ Save for later</button>
+                    <a href={detail.mapsUrl} target="_blank" rel="noreferrer" style={{ flex: 1, padding: 13, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 15, fontWeight: 600, textDecoration: "none", textAlign: "center" }}>Directions ↗</a>
+                  </>
+                ) : (
+                  <>
+                    <a href={detail.mapsUrl} target="_blank" rel="noreferrer" style={{ flex: 1, padding: 13, background: C.accent, borderRadius: 12, color: "#fff", fontSize: 15, fontWeight: 700, textDecoration: "none", textAlign: "center" }}>Open in Google Maps ↗</a>
+                    <button onClick={() => { setDetail(null); setSaveTarget(detail); }} style={{ flex: 1, padding: 13, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>❤️ Favorite</button>
+                  </>
+                )}
               </div>
 
               {isBeach(detail) && (
@@ -3544,13 +3558,13 @@ function PageInner() {
                       </div>
                     );
                   })()}
-                  {!beachCondLoading && !beachCond && <div style={{ fontSize: 13, color: C.muted }}>Could not load conditions right now.</div>}
+                  {!beachCondLoading && !beachCond && <div style={{ fontSize: 13, color: C.muted }}>Live conditions aren't available right now.</div>}
                 </div>
               )}
 
               <div style={{ marginBottom: 4 }}>
                 <button onClick={() => { const n = !showMore; setShowMore(n); if (n) { loadFullInsight(detail, detailExtra); loadVideos(detail); } }} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer", fontSize: 14, fontWeight: 800, color: C.accent, background: C.adim, border: `1px solid ${C.accent}`, borderRadius: 12, padding: "12px 14px" }}>
-                  <span>{showMore ? "Show less" : "✨ Show more details, tips and videos"}</span>
+                  <span>{showMore ? "Show less" : "✨ Tips, videos & more"}</span>
                   <span style={{ fontSize: 12, fontWeight: 800 }}>{showMore ? "▴" : "▾"}</span>
                 </button>
                 {showMore && (
@@ -3602,7 +3616,7 @@ function PageInner() {
                       );
                     })()}
                     {insightFull && insightFull.error && (
-                      <div onClick={() => { delete insightFullCache.current[detail.id]; loadFullInsight(detail, detailExtra); }} style={{ fontSize: 13, color: C.accent, cursor: "pointer", fontWeight: 600 }}>Could not load more. Tap to retry ↻</div>
+                      <div style={{ fontSize: 13, color: C.muted }}>That's everything we have on this spot for now.</div>
                     )}
                     {(videosLoading || (videos && videos.length > 0)) && (
                       <div style={{ marginTop: 14 }}>
