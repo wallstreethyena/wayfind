@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v4.2";
+const BUILD = "v4.3";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -2553,7 +2553,7 @@ function PageInner() {
               </div>
             )}
           </div>
-          <button onClick={submitSearch} style={{ background: C.accent, border: "none", borderRadius: 14, color: "#fff", fontSize: 14, fontWeight: 700, padding: "0 20px", cursor: "pointer" }}>Go</button>
+          <button onClick={submitSearch} style={{ background: C.accent, border: "none", borderRadius: 14, color: "#fff", fontSize: 14, fontWeight: 800, padding: "0 18px", cursor: "pointer", whiteSpace: "nowrap" }}>Wayfind It</button>
         </div>
       </div>
 
@@ -2707,7 +2707,13 @@ function PageInner() {
           if (heroOpenConfirmed) { heroBadgeIcon = heroIsGem ? "💎" : "✨"; heroBadgeText = heroIsGem ? "Hidden gem · open now" : "Start here · open now"; }
           else if (heroOpensLater) { heroBadgeIcon = "⏳"; heroBadgeText = "Worth the wait · " + heroPick.nextOpen.label; }
           const feedList = heroPick ? displayList.filter((p) => p && p.id !== heroPick.id) : displayList;
-          const homeFeed = sortBy === "near" ? [...feedList].sort((a, b) => (a.distMi ?? 1e12) - (b.distMi ?? 1e12)) : feedList;
+          // Trust fix (v4.3): closed places no longer hold the top slots. Sort by the
+          // chosen order first (score for Best, distance for Closest), then stably push
+          // open-now to the top, unknown-status next, opens-later below that, and closed
+          // last. Closed spots still appear, just never in the most valuable positions.
+          const homeOpenRank = (p) => !p ? 4 : p.openNow === true ? 0 : p.openNow == null ? 1 : (p.nextOpen && p.nextOpen.today) ? 2 : 3;
+          const homeBaseSorted = sortBy === "near" ? [...feedList].sort((a, b) => (a.distMi ?? 1e12) - (b.distMi ?? 1e12)) : [...feedList];
+          const homeFeed = homeBaseSorted.sort((a, b) => homeOpenRank(a) - homeOpenRank(b));
           return (
             <div style={isDesktop ? { display: "flex", gap: 28, alignItems: "flex-start", maxWidth: 1000, margin: "0 auto" } : {}}>
               {/* LEFT column on desktop: intent chips + hooks + feed */}
@@ -2727,16 +2733,20 @@ function PageInner() {
                   </div>
                   <span style={{ marginLeft: "auto", color: C.accent, fontSize: 20 }}>›</span>
                 </button>
-                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.7, textTransform: "uppercase", color: C.muted, margin: "0 2px 9px" }}>Discover {locName ? locName.split(",")[0] : "your area"}</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                  <CleanTile onClick={openSurprise} color={C.purple} icon="🎁" label="Surprise Me" sub="One bold pick" />
-                  <CleanTile onClick={() => setMenuSheet("pick")} color={C.accent} icon="🎲" label="Pick for me" sub="Roll the dice" />
-                  <CleanTile onClick={() => setMenuSheet("explore")} color={C.green} icon="📍" label="This area" sub={locName ? locName.split(",")[0] : "Explore"} />
-                  <CleanTile onClick={() => setMenuSheet("experiences")} color={C.gold} icon="✨" label="Experiences" sub="Pick an occasion" />
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "0 2px 9px" }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.7, textTransform: "uppercase", color: C.muted }}>Discover {locName ? locName.split(",")[0] : "your area"}</div>
                   {weather && (
-                    <CleanTile onClick={() => setMenuSheet("weather")} color={C.blue} labelColor="#fff" icon={<img src={"/wx/" + (weather.img || "cloudy") + ".png"} alt="" style={{ height: 30, width: "auto", display: "block" }} />} label={weather.temp + "°"} sub={weather.label} />
+                    <button onClick={() => setMenuSheet("weather")} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: "3px 10px 3px 6px", cursor: "pointer" }}>
+                      <img src={"/wx/" + (weather.img || "cloudy") + ".png"} alt="" style={{ height: 18, width: "auto", display: "block" }} />
+                      <span style={{ fontSize: 12, fontWeight: 800, color: C.text }}>{weather.temp}°</span>
+                    </button>
                   )}
-                  <CleanTile onClick={() => setMenuSheet("community")} color="#2DD4BF" icon="📚" label="Community" sub="Local events" />
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+                  <CleanTile onClick={openSurprise} color={C.border} labelColor={C.text} icon="🎁" label="Surprise Me" />
+                  <CleanTile onClick={() => setMenuSheet("explore")} color={C.border} labelColor={C.text} icon="📍" label="Nearby" />
+                  <CleanTile onClick={() => setMenuSheet("experiences")} color={C.border} labelColor={C.text} icon="✨" label="Occasions" />
+                  <CleanTile onClick={() => setMenuSheet("community")} color={C.border} labelColor={C.text} icon="📚" label="Local Events" />
                 </div>
               </div>
               {!suggestedLoading && suggested !== null && heroPick && (
@@ -3897,7 +3907,7 @@ function PageInner() {
             )}
             {menuSheet === "community" && (
               <>
-                <SheetHero icon="📚" title="Local & Community" subtitle="Free local programs and civic events near you." color="#2DD4BF" />
+                <SheetHero icon="📚" title="Local Events" subtitle="Free local programs and civic events near you." color="#2DD4BF" />
                 {libraryEvents && libraryEvents.length > 0 ? (
                   <>
                     {libraryEvents.slice(0, 12).map((e, i) => {
@@ -3924,7 +3934,7 @@ function PageInner() {
             )}
             {menuSheet === "explore" && (
               <>
-                <SheetHero icon="📍" title={locName || "This area"} subtitle="The best rated, currently open spots near you." color={C.green} />
+                <SheetHero icon="📍" title={locName || "Nearby"} subtitle="The best rated, currently open spots near you." color={C.green} />
                 <div style={{ fontSize: 13.5, color: C.light, lineHeight: 1.5, marginBottom: 16 }}>{intent ? (() => { const id = INTENTS.find((x) => x.id === intent); return id ? "Tuned for " + id.label.toLowerCase() + ", ranked by the Wayfind Score." : "The best-rated, currently open spots near you."; })() : "The best-rated, currently open spots near you, ranked best first."}</div>
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.55, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>
                   {(suggested ? suggested.length : places.length) > 0 ? (<><b style={{ color: C.text }}>{suggested ? suggested.length : places.length} spots</b> worth your time nearby, ranked best first.</>) : "Loading the best spots near you."}
@@ -3978,7 +3988,7 @@ function PageInner() {
             )}
             {menuSheet === "experiences" && (
               <>
-                <SheetHero icon="✨" title="Experiences" subtitle="Pick an occasion and the feed reshapes around it." color={C.gold} />
+                <SheetHero icon="✨" title="Occasions" subtitle="Pick an occasion and the feed reshapes around it." color={C.gold} />
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
                   {INTENTS.map((it) => {
                     const on = intent === it.id;
