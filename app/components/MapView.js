@@ -33,6 +33,16 @@ const PIN_SVG =
   "<rect x='16.5' y='15.2' width='1.7' height='1.7' fill='#F97316'/>" +
   "</svg>";
 
+// Ranked place markers use the Wayfind pin shape with the rank number sitting in
+// the pin's center, tinted by medal color so the top spots still read at a glance.
+function placePinSVG(fill, num, numColor) {
+  return "<svg xmlns='http://www.w3.org/2000/svg' width='34' height='44' viewBox='0 0 34 44'>" +
+    "<path d='M17 1.5 C9 1.5 3 7.3 3 15 C3 25 17 42 17 42 C17 42 31 25 31 15 C31 7.3 25 1.5 17 1.5 Z' fill='" + fill + "' stroke='#0D1117' stroke-width='1.4'/>" +
+    "<circle cx='17' cy='15' r='8.6' fill='#0D1117'/>" +
+    "<text x='17' y='15' text-anchor='middle' dy='0.35em' font-family='Arial, Helvetica, sans-serif' font-size='11' font-weight='700' fill='" + numColor + "'>" + num + "</text>" +
+    "</svg>";
+}
+
 export default function MapView({ places, center, category, deviceLoc, onSelect, events, onSelectEvent }) {
   const ref = useRef(null);
   const mapRef = useRef(null);
@@ -79,19 +89,15 @@ export default function MapView({ places, center, category, deviceLoc, onSelect,
 
     (places || []).forEach((p, i) => {
       const fill = medalColor(i) || REST;
-      const scale = i === 0 ? 21 : i === 1 ? 18 : i === 2 ? 16 : i <= 4 ? 13.5 : 11;
-      const labelSize = i <= 2 ? "13px" : i <= 4 ? "12px" : "10px";
+      const s = i === 0 ? 50 : i === 1 ? 45 : i === 2 ? 41 : i <= 4 ? 37 : 32;
+      const w = Math.round((s * 34) / 44);
       const marker = new window.google.maps.Marker({
         position: { lat: p.lat, lng: p.lng },
         map,
-        label: { text: String(i + 1), color: i <= 4 ? "#0D1117" : "#fff", fontSize: labelSize, fontWeight: "700" },
         icon: {
-          path: window.google.maps.SymbolPath.CIRCLE,
-          scale,
-          fillColor: fill,
-          fillOpacity: 1,
-          strokeColor: "#0D1117",
-          strokeWeight: 2,
+          url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(placePinSVG(fill, i + 1, "#ffffff")),
+          scaledSize: new window.google.maps.Size(w, s),
+          anchor: new window.google.maps.Point(Math.round(w / 2), s),
         },
         zIndex: i <= 4 ? 500 - i : 100,
       });

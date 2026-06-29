@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v3.3";
+const BUILD = "v3.4";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -2663,7 +2663,12 @@ function PageInner() {
               {/* App-tile navigation grid: replaces the scrolling category row on home. Each tile opens its own sheet. */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10, marginBottom: 16 }}>
                 <button onClick={() => setMenuSheet("menu")} style={{ height: 98, borderRadius: 18, border: `1.5px solid ${C.border}`, background: `linear-gradient(150deg, ${C.card} 0%, ${C.panel} 100%)`, color: C.text, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 7, padding: 8 }}>
-                  <span style={{ fontSize: 30, lineHeight: 1 }}>🧭</span>
+                  <span style={{ width: 28, height: 28, display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr", gap: 4 }}>
+                    <span style={{ background: C.accent, borderRadius: 3 }} />
+                    <span style={{ background: C.accent, borderRadius: 3, opacity: 0.65 }} />
+                    <span style={{ background: C.accent, borderRadius: 3, opacity: 0.65 }} />
+                    <span style={{ background: C.accent, borderRadius: 3 }} />
+                  </span>
                   <span style={{ fontSize: 14, fontWeight: 800 }}>Menu</span>
                   <span style={{ fontSize: 10.5, color: C.muted }}>All categories</span>
                 </button>
@@ -3903,7 +3908,7 @@ function PageInner() {
             <div style={{ width: 36, height: 4, background: C.border, borderRadius: 2, margin: "0 auto 16px" }} />
             {menuSheet === "menu" && (
               <>
-                <div style={{ fontSize: 18, fontWeight: 800, color: C.text, marginBottom: 4 }}>🧭 Browse by category</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: C.text, marginBottom: 4 }}>Browse by category</div>
                 <div style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>Pick a category to explore near {locName ? locName.split(",")[0] : "you"}.</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
                   {CATEGORIES.map((c) => {
