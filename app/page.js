@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v3.5";
+const BUILD = "v3.6";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -2541,8 +2541,8 @@ function PageInner() {
 
       {/* Category tabs (Explore + Map). Hidden on home, where the app-tile grid replaces it. */}
       {screen !== "saved" && screen !== "shared" && screen !== "events" && screen !== "experience" && screen !== "surprise" && screen !== "suggested" && (
-        <div style={{ display: "flex", gap: 7, overflowX: "auto", padding: "10px 14px", background: C.panel, flexShrink: 0 }}>
-          <button key="surprise" onClick={openSurprise} style={{ flexShrink: 0, padding: "8px 16px", borderRadius: 22, border: `1.5px solid ${C.purple}`, background: screen === "surprise" ? C.purple : "transparent", color: screen === "surprise" ? "#0D1117" : C.purple, fontSize: 14, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>🎁 Surprise Me</button>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 7, padding: "10px 14px", background: C.panel, flexShrink: 0 }}>
+          <button key="surprise" onClick={openSurprise} style={{ flexShrink: 0, padding: "8px 14px", borderRadius: 22, border: `1.5px solid ${C.purple}`, background: screen === "surprise" ? C.purple : "transparent", color: screen === "surprise" ? "#0D1117" : C.purple, fontSize: 13.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>🎁 Surprise Me</button>
           {CATEGORIES.map((c) => {
             const cc = CAT_COLOR[c.id] || { c: C.accent, dim: C.adim };
             const on = cat === c.id && screen !== "surprise" && screen !== "suggested";
@@ -2556,7 +2556,7 @@ function PageInner() {
                 } else {
                   pickCat(c.id);
                 }
-              }} style={{ flexShrink: 0, padding: "8px 16px", borderRadius: 22, border: `1.5px solid ${on ? cc.c : C.border}`, background: on ? cc.dim : "transparent", color: on ? cc.c : C.light, fontSize: 14, fontWeight: on ? 700 : 600, cursor: "pointer", whiteSpace: "nowrap" }}>{c.label}</button>
+              }} style={{ flexShrink: 0, padding: "8px 14px", borderRadius: 22, border: `1.5px solid ${on ? cc.c : C.border}`, background: on ? cc.dim : "transparent", color: on ? cc.c : C.light, fontSize: 13.5, fontWeight: on ? 700 : 600, cursor: "pointer", whiteSpace: "nowrap" }}>{c.label}</button>
             );
           })}
         </div>
@@ -2661,8 +2661,8 @@ function PageInner() {
               {/* LEFT column on desktop: intent chips + hooks + feed */}
               <div style={{ flex: 1, minWidth: 0, maxWidth: isDesktop ? 600 : undefined }}>
               {/* App-tile navigation grid: replaces the scrolling category row on home. Each tile opens its own sheet. */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10, marginBottom: 16 }}>
-                <button onClick={() => setMenuSheet("menu")} style={{ gridColumn: "1 / -1", borderRadius: 18, border: `1.5px solid ${C.accent}`, background: `linear-gradient(150deg, ${C.adim} 0%, ${C.card} 70%)`, color: C.text, cursor: "pointer", display: "flex", alignItems: "center", gap: 14, padding: "16px 18px" }}>
+              <div style={{ marginBottom: 16 }}>
+                <button onClick={() => setMenuSheet("menu")} style={{ width: "100%", borderRadius: 18, border: `1.5px solid ${C.accent}`, background: `linear-gradient(150deg, ${C.adim} 0%, ${C.card} 70%)`, color: C.text, cursor: "pointer", display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", marginBottom: 14 }}>
                   <span style={{ width: 32, height: 32, flexShrink: 0, display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr", gap: 4 }}>
                     <span style={{ background: C.accent, borderRadius: 3 }} />
                     <span style={{ background: C.accent, borderRadius: 3, opacity: 0.65 }} />
@@ -2675,28 +2675,31 @@ function PageInner() {
                   </div>
                   <span style={{ marginLeft: "auto", color: C.accent, fontSize: 20 }}>›</span>
                 </button>
-                <button onClick={openSurprise} style={{ height: 98, borderRadius: 18, border: `1.5px solid ${C.purple}`, background: `linear-gradient(150deg, rgba(167,139,250,.22) 0%, ${C.card} 100%)`, color: C.text, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 7, padding: 8 }}>
-                  <span style={{ fontSize: 30, lineHeight: 1 }}>🎁</span>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: C.purple }}>Surprise Me</span>
-                  <span style={{ fontSize: 10.5, color: C.muted }}>One bold pick</span>
-                </button>
-                <button onClick={() => setMenuSheet("explore")} style={{ height: 98, borderRadius: 18, border: `1.5px solid ${C.accent}`, background: `linear-gradient(150deg, ${C.adim} 0%, ${C.card} 100%)`, color: C.text, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, padding: 8 }}>
-                  <span style={{ fontSize: 28, lineHeight: 1 }}>📍</span>
-                  <span style={{ fontSize: 13.5, fontWeight: 800, color: C.accent, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{locName ? locName.split(",")[0] : "Explore"}</span>
-                  <span style={{ fontSize: 10.5, color: C.muted }}>About this area</span>
-                </button>
-                <button onClick={() => setMenuSheet("experiences")} style={{ height: 98, borderRadius: 18, border: `1.5px solid ${C.gold}`, background: `linear-gradient(150deg, rgba(251,191,36,.18) 0%, ${C.card} 100%)`, color: C.text, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 7, padding: 8 }}>
-                  <span style={{ fontSize: 28, lineHeight: 1 }}>✨</span>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: C.gold }}>Experiences</span>
-                  <span style={{ fontSize: 10.5, color: C.muted }}>Pick an occasion</span>
-                </button>
-                {weather && (
-                  <button onClick={() => setMenuSheet("weather")} style={{ height: 98, borderRadius: 18, border: `1.5px solid ${C.blue}`, background: `linear-gradient(150deg, rgba(56,189,248,.16) 0%, ${C.card} 100%)`, color: C.text, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, padding: 8 }}>
-                    <img src={"/wx/" + (weather.img || "cloudy") + ".png"} alt="" style={{ height: 40, width: "auto", display: "block" }} />
-                    <span style={{ fontSize: 19, fontWeight: 800 }}>{weather.temp}°</span>
-                    {weather.sunset && <span style={{ fontSize: 10, color: C.muted }}>🌅 {weather.sunset}</span>}
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.7, textTransform: "uppercase", color: C.muted, margin: "0 2px 9px" }}>Discover {locName ? locName.split(",")[0] : "your area"}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                  <button onClick={openSurprise} style={{ minHeight: 82, borderRadius: 14, border: `1px solid ${C.border}`, background: C.card, color: C.text, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 6px" }}>
+                    <span style={{ fontSize: 24, lineHeight: 1 }}>🎁</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: C.purple }}>Surprise Me</span>
                   </button>
-                )}
+                  <button onClick={() => setMenuSheet("pick")} style={{ minHeight: 82, borderRadius: 14, border: `1px solid ${C.border}`, background: C.card, color: C.text, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 6px" }}>
+                    <span style={{ fontSize: 24, lineHeight: 1 }}>🎲</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: C.accent }}>Pick for me</span>
+                  </button>
+                  <button onClick={() => setMenuSheet("explore")} style={{ minHeight: 82, borderRadius: 14, border: `1px solid ${C.border}`, background: C.card, color: C.text, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 6px" }}>
+                    <span style={{ fontSize: 23, lineHeight: 1 }}>📍</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: C.green, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{locName ? locName.split(",")[0] : "Explore"}</span>
+                  </button>
+                  <button onClick={() => setMenuSheet("experiences")} style={{ minHeight: 82, borderRadius: 14, border: `1px solid ${C.border}`, background: C.card, color: C.text, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 6px" }}>
+                    <span style={{ fontSize: 23, lineHeight: 1 }}>✨</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: C.gold }}>Experiences</span>
+                  </button>
+                  {weather && (
+                    <button onClick={() => setMenuSheet("weather")} style={{ minHeight: 82, borderRadius: 14, border: `1px solid ${C.border}`, background: C.card, color: C.text, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 5, padding: "12px 6px" }}>
+                      <img src={"/wx/" + (weather.img || "cloudy") + ".png"} alt="" style={{ height: 28, width: "auto", display: "block" }} />
+                      <span style={{ fontSize: 13, fontWeight: 800, color: C.blue }}>{weather.temp}° <span style={{ color: C.muted, fontWeight: 700 }}>Weather</span></span>
+                    </button>
+                  )}
+                </div>
               </div>
               {!suggestedLoading && suggested !== null && heroPick && (
                 <div style={{ marginBottom: 16, border: `1.5px solid ${C.accent}`, borderRadius: 18, overflow: "hidden", background: `linear-gradient(160deg, rgba(255,150,70,.10) 0%, ${C.card} 60%)`, boxShadow: "0 6px 24px rgba(0,0,0,.35)" }}>
@@ -2746,35 +2749,6 @@ function PageInner() {
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7, flexWrap: "wrap" }}>
                     <div style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>⭐ {list.length} spots worth your time, ranked best first</div>
                     {hasAffinity && <span style={{ fontSize: 11, fontWeight: 800, color: C.accent, background: C.adim, border: `1px solid ${C.accent}`, borderRadius: 999, padding: "2px 8px" }}>🎯 Ranked for your taste</span>}
-                  </div>
-                )}
-                <button onClick={() => setPickOpen((o) => !o)} style={{ width: "100%", marginTop: 13, padding: "12px 14px", borderRadius: 12, border: "none", background: C.accent, color: "#0D1117", fontSize: 14, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>🎲 Pick for me {pickOpen ? "▲" : "▼"}</button>
-                {pickOpen && (
-                  <div style={{ marginTop: 12, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
-                    <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.5, marginBottom: 12 }}>Can't decide? Roll the dice and Wayfind lands you on one great spot from your picks. Keep rolling — your rolls are saved below so you can go back to one you liked.</div>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-                      <button onClick={() => rollHomePick(displayList)} disabled={homeRolling} style={{ width: 76, height: 76, borderRadius: 18, border: `2px solid ${C.accent}`, background: C.adim, fontSize: 38, cursor: homeRolling ? "default" : "pointer", lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", animation: homeRolling ? "wfbob 0.4s ease-in-out infinite" : "none" }}>{homeRolling ? homeDiceFace : "🎲"}</button>
-                      <button onClick={() => rollHomePick(displayList)} disabled={homeRolling} style={{ padding: "9px 22px", borderRadius: 999, border: "none", background: C.accent, color: "#0D1117", fontSize: 13.5, fontWeight: 800, cursor: homeRolling ? "default" : "pointer", opacity: homeRolling ? 0.6 : 1 }}>{rollHistory.length ? "Roll again" : "Roll the dice"}</button>
-                    </div>
-                    {rollHistory.length > 0 && (
-                      <div style={{ marginTop: 14 }}>
-                        <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>Your rolls</div>
-                        {rollHistory.map((rp, i) => (
-                          <div key={rp.id + "-" + i} onClick={() => openDetail(rp)} style={{ display: "flex", alignItems: "center", gap: 10, background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 10px", marginBottom: 7, cursor: "pointer" }}>
-                            <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: "50%", background: C.adim, color: C.accent, fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{rollHistory.length - i}</span>
-                            <FallbackImg src={rp.photo} icon="🍽️" style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{rp.name}</div>
-                              <div style={{ display: "flex", gap: 6, marginTop: 2, alignItems: "center" }}>
-                                {rp.rating && <span style={{ fontSize: 11, color: "#F59E0B" }}>★ {rp.rating}</span>}
-                                {rp.distMi != null && <span style={{ fontSize: 11, color: C.muted }}>· {rp.distMi.toFixed(1)} mi</span>}
-                              </div>
-                            </div>
-                            <span style={{ color: C.muted, fontSize: 16, flexShrink: 0 }}>›</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -3920,15 +3894,10 @@ function PageInner() {
             )}
             {menuSheet === "explore" && (
               <>
-                <div style={{ fontSize: 18, fontWeight: 800, color: C.text, marginBottom: 4 }}>📍 {locName || "Your area"}</div>
-                <div style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>What's around you right now.</div>
-                {weather && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>
-                    <span style={{ fontSize: 26 }}>{weather.icon}</span>
-                    <div style={{ fontSize: 14, color: C.light }}><b style={{ color: C.text }}>{weather.temp}°</b>{weather.label ? " · " + weather.label : ""}{weather.sunset ? " · 🌅 " + weather.sunset : ""}</div>
-                  </div>
-                )}
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.55, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: C.green, letterSpacing: "0.7px", textTransform: "uppercase", marginBottom: 5 }}>You are exploring</div>
+                <div style={{ fontSize: 23, fontWeight: 800, color: C.text, marginBottom: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>📍 {locName || "Your area"}</div>
+                <div style={{ fontSize: 13.5, color: C.light, lineHeight: 1.5, marginBottom: 16 }}>{intent ? (() => { const id = INTENTS.find((x) => x.id === intent); return id ? "Tuned for " + id.label.toLowerCase() + ", ranked by the Wayfind Score." : "The best-rated, currently open spots near you."; })() : "The best-rated, currently open spots near you, ranked best first."}</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.55, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>
                   {(suggested ? suggested.length : places.length) > 0 ? (<><b style={{ color: C.text }}>{suggested ? suggested.length : places.length} spots</b> worth your time nearby, ranked best first.</>) : "Loading the best spots near you."}
                 </div>
                 {(() => {
@@ -3941,13 +3910,42 @@ function PageInner() {
                   const gems = src.filter((p) => (p.rating || 0) >= 4.5).length;
                   const catLine = top.map(([c, n]) => `${c} (${n})`).join(" and ");
                   return (
-                    <div style={{ fontSize: 13.5, color: C.light, lineHeight: 1.55, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
+                    <div style={{ fontSize: 13.5, color: C.light, lineHeight: 1.55, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 16 }}>
                       <div style={{ fontSize: 11, color: C.muted, textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 700, marginBottom: 5 }}>The local scene</div>
                       Strongest around here: {catLine}.{gems > 0 ? ` ${gems} spot${gems === 1 ? "" : "s"} sitting at 4.5★ or higher.` : ""}
                     </div>
                   );
                 })()}
-                <button onClick={() => { setMenuSheet(null); setScreen("explore"); }} style={{ width: "100%", padding: 13, borderRadius: 12, border: "none", background: C.accent, color: "#0D1117", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>Browse all spots →</button>
+                <button onClick={() => { setMenuSheet(null); setScreen("explore"); }} style={{ width: "100%", padding: 14, borderRadius: 12, border: "none", background: C.green, color: "#0D1117", fontSize: 14.5, fontWeight: 800, cursor: "pointer" }}>Browse all spots →</button>
+              </>
+            )}
+            {menuSheet === "pick" && (
+              <>
+                <div style={{ fontSize: 18, fontWeight: 800, color: C.text, marginBottom: 4 }}>🎲 Pick for me</div>
+                <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5, marginBottom: 18 }}>Can't decide? Roll and Wayfind lands you on one great spot near you. Keep rolling — your rolls are saved below so you can go back to one you liked.</div>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, marginBottom: 6 }}>
+                  <button onClick={() => rollHomePick(suggested || places || [])} disabled={homeRolling} style={{ width: 84, height: 84, borderRadius: 20, border: `2px solid ${C.accent}`, background: C.adim, fontSize: 42, cursor: homeRolling ? "default" : "pointer", lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", animation: homeRolling ? "wfbob 0.4s ease-in-out infinite" : "none" }}>{homeRolling ? homeDiceFace : "🎲"}</button>
+                  <button onClick={() => rollHomePick(suggested || places || [])} disabled={homeRolling} style={{ padding: "11px 26px", borderRadius: 999, border: "none", background: C.accent, color: "#0D1117", fontSize: 14, fontWeight: 800, cursor: homeRolling ? "default" : "pointer", opacity: homeRolling ? 0.6 : 1 }}>{rollHistory.length ? "Roll again" : "Roll the dice"}</button>
+                </div>
+                {rollHistory.length > 0 && (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>Your rolls</div>
+                    {rollHistory.map((rp, i) => (
+                      <div key={rp.id + "-" + i} onClick={() => { setMenuSheet(null); openDetail(rp); }} style={{ display: "flex", alignItems: "center", gap: 10, background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 10px", marginBottom: 7, cursor: "pointer" }}>
+                        <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: "50%", background: C.adim, color: C.accent, fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{rollHistory.length - i}</span>
+                        <FallbackImg src={rp.photo} icon="🍽️" style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{rp.name}</div>
+                          <div style={{ display: "flex", gap: 6, marginTop: 2, alignItems: "center" }}>
+                            {rp.rating && <span style={{ fontSize: 11, color: "#F59E0B" }}>★ {rp.rating}</span>}
+                            {rp.distMi != null && <span style={{ fontSize: 11, color: C.muted }}>· {rp.distMi.toFixed(1)} mi</span>}
+                          </div>
+                        </div>
+                        <span style={{ color: C.muted, fontSize: 16, flexShrink: 0 }}>›</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </>
             )}
             {menuSheet === "experiences" && (
@@ -3964,6 +3962,10 @@ function PageInner() {
                       </button>
                     );
                   })}
+                  <button onClick={() => { const rc = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)]; setMenuSheet(null); pickCat(rc.id); }} style={{ height: 76, borderRadius: 16, border: `1.5px dashed ${C.accent}`, background: C.adim, color: C.accent, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 800 }}>
+                    <span style={{ fontSize: 24, lineHeight: 1 }}>🎲</span>
+                    <span>Surprise category</span>
+                  </button>
                 </div>
               </>
             )}

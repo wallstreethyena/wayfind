@@ -18,19 +18,11 @@ function medalColor(i) {
   return null;
 }
 
-// The user's own location, shown as a refined Wayfind pin: the creature is
-// back, but slimmer and lighter so it doesn't overpower the map.
+// The user's own location, shown as the clean Wayfind brand pin: a hollow
+// teardrop with nothing inside, so it reads as a true pinpoint on the map.
 const PIN_SVG =
   "<svg xmlns='http://www.w3.org/2000/svg' width='30' height='40' viewBox='0 0 30 40'>" +
-  "<path d='M15 1.5 C8 1.5 2.7 6.7 2.7 13.6 C2.7 22.5 15 38 15 38 C15 38 27.3 22.5 27.3 13.6 C27.3 6.7 22 1.5 15 1.5 Z' fill='#F97316' stroke='#ffffff' stroke-width='1.2'/>" +
-  "<circle cx='15' cy='13.4' r='8.2' fill='#0D1117'/>" +
-  "<rect x='10.4' y='9.8' width='9.2' height='5.4' rx='1' fill='#ffffff'/>" +
-  "<rect x='13' y='7.6' width='4' height='2.6' rx='0.6' fill='#ffffff'/>" +
-  "<rect x='11.6' y='11.1' width='2' height='2.3' fill='#0D1117'/>" +
-  "<rect x='16.4' y='11.1' width='2' height='2.3' fill='#0D1117'/>" +
-  "<rect x='10.7' y='15.2' width='1.7' height='1.7' fill='#ffffff'/>" +
-  "<rect x='13.6' y='15.2' width='1.7' height='1.7' fill='#ffffff'/>" +
-  "<rect x='16.5' y='15.2' width='1.7' height='1.7' fill='#F97316'/>" +
+  "<path fill-rule='evenodd' fill='#F97316' stroke='#ffffff' stroke-width='1.3' d='M15 1.5 C8 1.5 2.7 6.7 2.7 13.6 C2.7 22.5 15 38 15 38 C15 38 27.3 22.5 27.3 13.6 C27.3 6.7 22 1.5 15 1.5 Z M15 8.2 a5.4 5.4 0 1 0 0.01 0 Z'/>" +
   "</svg>";
 
 // Ranked place markers use the Wayfind pin shape with the rank number sitting in
