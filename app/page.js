@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v1.4";
+const BUILD = "v1.5";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -1208,6 +1208,7 @@ function PageInner() {
   const [vibe, setVibe] = useState("all");
   const [sortBy, setSortBy] = useState("best");
   const [searchRadius, setSearchRadius] = useState(24140); // meters, default ~15 miles (matches the 15 mi Refine option)
+  const [visibleCount, setVisibleCount] = useState(5); // explore list shows 5, then "Wayfind 5 more spots"
   const [showRadiusWheel, setShowRadiusWheel] = useState(false);
   const [showNearbyExp, setShowNearbyExp] = useState(false); // v3.7 Phase 2: ✨ Nearby experiences dropdown in the sort row
   const [sortOpen, setSortOpen] = useState(false);
@@ -1611,7 +1612,9 @@ function PageInner() {
   // at changes — category, sub-filter, vibe, sort, intent, distance, or screen.
   // Without this, changing a filter leaves you stranded mid-list looking at
   // different content.
-  useEffect(() => { try { if (scrollRef.current) scrollRef.current.scrollTo({ top: 0 }); } catch (e) {} setMapPreview(null); }, [cat, sub, vibe, sortBy, intent, searchRadius, screen, activeBadge, expSort, expOpenOnly]);
+  useEffect(() => { try { if (scrollRef.current) scrollRef.current.scrollTo({ top: 0 }); } catch (e) {} setMapPreview(null); }, [cat, sub, vibe, intent, searchRadius, screen, activeBadge]);
+  // Reset the explore list back to 5 whenever a new result set loads or search mode flips.
+  useEffect(() => { setVisibleCount(5); }, [places, searchMode]);
   function pickSub(id) { setSub(id); setVibe("all"); }
 
   // Signal functions — record engagement, drive personalised ranking, trigger sign-up.
@@ -2596,9 +2599,19 @@ function PageInner() {
       {view.length > 3 && hookCards.length > 0 && (
         <HooksBanner hooks={hookCards} likedIds={hookLikes} totalLiked={hookLikes.size} onOpen={openHook} onLike={onHookHeart} allPlaces={[...(suggested || []), ...places].filter(Boolean)} isDesktop={isDesktop} />
       )}
-      {view.slice(3).map((p, i) => (
+      {view.slice(3, visibleCount).map((p, i) => (
         <PlaceCard key={p.id} p={p} rank={i + 4} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => quickSaveFavorite(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} />
       ))}
+      {!loading && view.length > visibleCount && (
+        <div style={{ padding: "2px 2px 10px" }}>
+          <div style={{ height: 1, background: C.border, margin: "0 0 12px" }} />
+          <button onClick={() => setVisibleCount((c) => c + 5)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, height: 50, borderRadius: 14, border: "none", background: "linear-gradient(180deg, #FB923C 0%, #F97316 52%, #EA580C 100%)", color: "#fff", fontSize: 14.5, fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 14px rgba(249,115,22,.4)" }}>
+            Wayfind 5 more spots
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: "block" }}><path d="M5 12h13M13 6l6 6-6 6" /></svg>
+          </button>
+          <div style={{ textAlign: "center", fontSize: 11.5, color: C.muted, marginTop: 9 }}>More spots worth your time nearby</div>
+        </div>
+      )}
     </>
   );
 
@@ -2623,8 +2636,8 @@ function PageInner() {
             <button onClick={shareApp} aria-label="Share Wayfind" style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, fontSize: 15, fontWeight: 700, borderRadius: 999, cursor: "pointer", background: "transparent", color: C.muted, border: `1px solid ${C.border}` }}>{shareCopied ? "✓" : "↗"}</button>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, position: "relative" }}>
-          <div style={{ flex: 1, position: "relative" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, position: "relative" }}>
+          <div style={{ position: "relative", width: "100%" }}>
             <span style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", fontSize: 15, pointerEvents: "none", opacity: 0.85 }}>🔍</span>
             <input
               value={query}
@@ -2652,7 +2665,7 @@ function PageInner() {
               </div>
             )}
           </div>
-          <button onClick={submitSearch} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 7, background: "linear-gradient(180deg, #FB923C 0%, #F97316 52%, #EA580C 100%)", border: "none", borderRadius: 14, color: "#fff", fontSize: 14, fontWeight: 800, padding: "0 14px", cursor: "pointer", whiteSpace: "nowrap", boxShadow: "0 4px 14px rgba(249,115,22,.45)" }}>
+          <button onClick={submitSearch} style={{ width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, background: "linear-gradient(180deg, #FB923C 0%, #F97316 52%, #EA580C 100%)", border: "none", borderRadius: 14, color: "#fff", fontSize: 15, fontWeight: 800, height: 48, cursor: "pointer", whiteSpace: "nowrap", boxShadow: "0 4px 14px rgba(249,115,22,.45)" }}>
             <svg width="13" height="16" viewBox="0 0 24 24" fill="#fff" aria-hidden="true" style={{ display: "block" }}><path fillRule="evenodd" clipRule="evenodd" d="M12 2C7.58 2 4 5.58 4 10c0 5.25 6.94 11.4 7.24 11.66a1.15 1.15 0 0 0 1.52 0C13.06 21.4 20 15.25 20 10c0-4.42-3.58-8-8-8Zm0 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z" /></svg>
             Wayfind It
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: "block" }}><path d="M5 12h13M13 6l6 6-6 6" /></svg>
