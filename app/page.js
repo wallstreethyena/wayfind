@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v2.8";
+const BUILD = "v2.9";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -582,7 +582,32 @@ function eventSegmentMeta(seg, genre) {
   if (s.includes("arts") || s.includes("theatre") || s.includes("theater")) return { icon: "🎭", short: "Theater", color: "#A78BFA" };
   if (s.includes("film")) return { icon: "🎬", short: "Film", color: "#FBBF24" };
   if (s.includes("family")) return { icon: "👨‍👩‍👧", short: "Family", color: "#22C55E" };
-  return { icon: "🎪", short: seg || "Event", color: "#94A3B8" };
+  if (!s || s.includes("misc") || s.includes("undefined") || s.includes("other")) return { icon: "🎪", short: "Other", color: "#94A3B8" };
+  return { icon: "🎪", short: seg || "Other", color: "#94A3B8" };
+}
+
+// An honest "what to wear" suggestion built only from signals we actually have:
+// today's live weather, the venue's type, and its price tier. No invented
+// specifics, no product links — just a practical nudge.
+function whatToWear(p, weather) {
+  if (!p) return null;
+  const t = ((p.type || "") + " " + (Array.isArray(p.types) ? p.types.join(" ") : "")).toLowerCase();
+  const pn = p.priceNum;
+  let dress;
+  if (/beach|park|trail|outdoor|zoo|garden|hik/.test(t)) dress = "Casual and comfortable, with shoes you can walk in.";
+  else if (pn === 4 || pn === 3) dress = "An upscale spot — smart casual to dressy fits the room.";
+  else if (/bar|pub|brewery|club|night/.test(t)) dress = "Relaxed and casual fits the vibe.";
+  else if (pn === 2) dress = "Smart casual is a safe call.";
+  else dress = "Casual is fine here.";
+  let wx = null;
+  if (weather && weather.temp != null) {
+    const temp = weather.temp;
+    if (weather.wet) wx = `It's ${temp}° and ${(weather.label || "wet").toLowerCase()} out, so bring a layer or umbrella.`;
+    else if (temp >= 88) wx = `It's hot at ${temp}°, so keep it light and breathable and bring water.`;
+    else if (temp <= 55) wx = `It's chilly at ${temp}°, so layer up.`;
+    else wx = `Comfortable ${temp}° out right now.`;
+  }
+  return { dress, wx };
 }
 
 function todayHours(extra) {
@@ -1045,6 +1070,10 @@ function PageInner() {
   const [showRadiusWheel, setShowRadiusWheel] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const [heroNonce, setHeroNonce] = useState(0); // taps on "show another angle" cycle the hero pick
+  const [pickOpen, setPickOpen] = useState(false); // Pick-for-me panel expanded
+  const [homeRolling, setHomeRolling] = useState(false); // dice animating in the panel
+  const [homeDiceFace, setHomeDiceFace] = useState("🎲");
+  const [rollHistory, setRollHistory] = useState([]); // session-only history of dice rolls
   const [center, setCenter] = useState(DEFAULT_CENTER);
   const [deviceLoc, setDeviceLoc] = useState(null);
   const [locName, setLocName] = useState("");
@@ -1308,6 +1337,23 @@ function PageInner() {
     }, 1000);
   }
   function rollDice() { setDiceChoose(true); }
+  // In-place dice roll for the home Pick-for-me panel. Spins, lands on a random
+  // spot from the current feed, and pushes it onto a session roll history the
+  // user can scroll back through. Does not navigate away.
+  function rollHomePick(pool) {
+    const arr = (pool || []).filter(Boolean);
+    if (!arr.length) { showToast("Nothing to roll here yet"); return; }
+    setHomeRolling(true);
+    const faces = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
+    const iv = setInterval(() => setHomeDiceFace(faces[Math.floor(Math.random() * 6)]), 90);
+    setTimeout(() => {
+      clearInterval(iv);
+      setHomeDiceFace("🎲");
+      setHomeRolling(false);
+      const pick = arr[Math.floor(Math.random() * arr.length)];
+      if (pick) setRollHistory((h) => [pick, ...h.filter((x) => x && x.id !== pick.id)].slice(0, 8));
+    }, 900);
+  }
   async function rollFor(spec) {
     setDiceChoose(false);
     if (!spec || spec.any || !center) { animateRollThenPick(rollDicePool()); return; }
@@ -2576,6 +2622,38 @@ function PageInner() {
             <div style={isDesktop ? { display: "flex", gap: 28, alignItems: "flex-start", maxWidth: 1000, margin: "0 auto" } : {}}>
               {/* LEFT column on desktop: intent chips + hooks + feed */}
               <div style={{ flex: 1, minWidth: 0, maxWidth: isDesktop ? 600 : undefined }}>
+              {!suggestedLoading && suggested !== null && heroPick && (
+                <div style={{ marginBottom: 16, border: `1.5px solid ${C.accent}`, borderRadius: 18, overflow: "hidden", background: `linear-gradient(160deg, rgba(255,150,70,.10) 0%, ${C.card} 60%)`, boxShadow: "0 6px 24px rgba(0,0,0,.35)" }}>
+                  <div onClick={() => openDetail(heroPick)} style={{ cursor: "pointer" }}>
+                    <div style={{ position: "relative" }}>
+                      <FallbackImg src={heroPick.photo} icon="📍" style={{ width: "100%", height: 200, objectFit: "cover", display: "block" }} />
+                      <div style={{ position: "absolute", top: 12, left: 12, display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(0,0,0,.62)", border: `1px solid ${C.accent}80`, borderRadius: 999, padding: "5px 11px", backdropFilter: "blur(4px)" }}>
+                        <span style={{ fontSize: 12 }}>{heroIsGem ? "💎" : "✨"}</span>
+                        <span style={{ fontSize: 10, fontWeight: 800, color: C.accent, textTransform: "uppercase", letterSpacing: "0.7px" }}>{heroIsGem ? "Hidden gem for right now" : "Start here · " + moment + " pick"}</span>
+                      </div>
+                    </div>
+                    <div style={{ padding: 16 }}>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: C.text, lineHeight: 1.2 }}>{heroPick.name}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                        {heroSl && <span style={{ fontSize: 20, fontWeight: 900, color: C.accent }}>{heroSl.s}</span>}
+                        {heroSl && <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{heroSl.word}</span>}
+                        {heroPick.rating && <span style={{ color: "#F59E0B", fontSize: 13 }}>★ {heroPick.rating}</span>}
+                        {heroPick.reviews != null && <span style={{ fontSize: 12, color: C.muted }}>· {heroPick.reviews.toLocaleString()} reviews</span>}
+                        {heroPick.openNow === true && <span style={{ fontSize: 12, fontWeight: 700, color: C.green }}>· Open now</span>}
+                        {heroPick.openNow === false && <span style={{ fontSize: 12, fontWeight: 700, color: heroPick.nextOpen && heroPick.nextOpen.today ? C.gold : C.red }}>· {heroPick.nextOpen && heroPick.nextOpen.today ? heroPick.nextOpen.label : "Closed"}</span>}
+                        {heroPick.distMi != null && <span style={{ fontSize: 12, color: C.muted }}>· {heroPick.distMi.toFixed(1)} mi</span>}
+                      </div>
+                      {heroReason && <div style={{ fontSize: 14, color: C.light, lineHeight: 1.5, marginTop: 10 }}><span style={{ color: C.accent }}>✨ </span>{heroReason}</div>}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 10, padding: "0 16px 16px" }}>
+                    <button onClick={() => openDetail(heroPick)} style={{ flex: 2, background: C.accent, color: "#0D1117", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 800, padding: "13px 0", cursor: "pointer" }}>Take me there →</button>
+                    {heroOrder.length > 1 && (
+                      <button onClick={() => setHeroNonce((n) => n + 1)} style={{ flex: 1, background: "transparent", color: C.accent, border: `1.5px solid ${C.accent}`, borderRadius: 12, fontSize: 13.5, fontWeight: 800, padding: "13px 0", cursor: "pointer" }}>Another angle</button>
+                    )}
+                  </div>
+                </div>
+              )}
               {!isDesktop && (
               <div style={{ border: `1px solid ${C.accent}`, borderRadius: 16, padding: 16, marginBottom: 14, background: `linear-gradient(160deg, rgba(255,150,70,.10) 0%, ${C.adim} 55%)` }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: weather ? 11 : 6 }}>
@@ -2608,44 +2686,36 @@ function PageInner() {
                     {hasAffinity && <span style={{ fontSize: 11, fontWeight: 800, color: C.accent, background: C.adim, border: `1px solid ${C.accent}`, borderRadius: 999, padding: "2px 8px" }}>🎯 Ranked for your taste</span>}
                   </div>
                 )}
-                <div style={{ display: "flex", gap: 8, marginTop: 13 }}>
-                  <button onClick={rollDice} style={{ flex: 1, padding: "11px 0", borderRadius: 12, border: "none", background: C.accent, color: "#0D1117", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>🎲 Pick for me</button>
-                  <button onClick={() => setScreen("explore")} style={{ flex: 1, padding: "11px 0", borderRadius: 12, border: `1.5px solid ${C.accent}`, background: "transparent", color: C.accent, fontSize: 14, fontWeight: 800, cursor: "pointer" }}>Browse all ↗</button>
-                </div>
-                <div style={{ fontSize: 11.5, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>Pick for me lands you on one of these spots at random, for when you cannot decide. Browse all opens the full menu by category.</div>
-              </div>
-              )}
-              {!suggestedLoading && suggested !== null && heroPick && (
-                <div style={{ marginBottom: 16, border: `1.5px solid ${C.accent}`, borderRadius: 18, overflow: "hidden", background: `linear-gradient(160deg, rgba(255,150,70,.10) 0%, ${C.card} 60%)`, boxShadow: "0 6px 24px rgba(0,0,0,.35)" }}>
-                  <div onClick={() => openDetail(heroPick)} style={{ cursor: "pointer" }}>
-                    <div style={{ position: "relative" }}>
-                      <FallbackImg src={heroPick.photo} icon="📍" style={{ width: "100%", height: 200, objectFit: "cover", display: "block" }} />
-                      <div style={{ position: "absolute", top: 12, left: 12, display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(0,0,0,.62)", border: `1px solid ${C.accent}80`, borderRadius: 999, padding: "5px 11px", backdropFilter: "blur(4px)" }}>
-                        <span style={{ fontSize: 12 }}>{heroIsGem ? "💎" : "✨"}</span>
-                        <span style={{ fontSize: 10, fontWeight: 800, color: C.accent, textTransform: "uppercase", letterSpacing: "0.7px" }}>{heroIsGem ? "Hidden gem for right now" : "Start here · " + moment + " pick"}</span>
-                      </div>
+                <button onClick={() => setPickOpen((o) => !o)} style={{ width: "100%", marginTop: 13, padding: "12px 14px", borderRadius: 12, border: "none", background: C.accent, color: "#0D1117", fontSize: 14, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>🎲 Pick for me {pickOpen ? "▲" : "▼"}</button>
+                {pickOpen && (
+                  <div style={{ marginTop: 12, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
+                    <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.5, marginBottom: 12 }}>Can't decide? Roll the dice and Wayfind lands you on one great spot from your picks. Keep rolling — your rolls are saved below so you can go back to one you liked.</div>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                      <button onClick={() => rollHomePick(displayList)} disabled={homeRolling} style={{ width: 76, height: 76, borderRadius: 18, border: `2px solid ${C.accent}`, background: C.adim, fontSize: 38, cursor: homeRolling ? "default" : "pointer", lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", animation: homeRolling ? "wfbob 0.4s ease-in-out infinite" : "none" }}>{homeRolling ? homeDiceFace : "🎲"}</button>
+                      <button onClick={() => rollHomePick(displayList)} disabled={homeRolling} style={{ padding: "9px 22px", borderRadius: 999, border: "none", background: C.accent, color: "#0D1117", fontSize: 13.5, fontWeight: 800, cursor: homeRolling ? "default" : "pointer", opacity: homeRolling ? 0.6 : 1 }}>{rollHistory.length ? "Roll again" : "Roll the dice"}</button>
                     </div>
-                    <div style={{ padding: 16 }}>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: C.text, lineHeight: 1.2 }}>{heroPick.name}</div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                        {heroSl && <span style={{ fontSize: 20, fontWeight: 900, color: C.accent }}>{heroSl.s}</span>}
-                        {heroSl && <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{heroSl.word}</span>}
-                        {heroPick.rating && <span style={{ color: "#F59E0B", fontSize: 13 }}>★ {heroPick.rating}</span>}
-                        {heroPick.reviews != null && <span style={{ fontSize: 12, color: C.muted }}>· {heroPick.reviews.toLocaleString()} reviews</span>}
-                        {heroPick.openNow === true && <span style={{ fontSize: 12, fontWeight: 700, color: C.green }}>· Open now</span>}
-                        {heroPick.openNow === false && <span style={{ fontSize: 12, fontWeight: 700, color: heroPick.nextOpen && heroPick.nextOpen.today ? C.gold : C.red }}>· {heroPick.nextOpen && heroPick.nextOpen.today ? heroPick.nextOpen.label : "Closed"}</span>}
-                        {heroPick.distMi != null && <span style={{ fontSize: 12, color: C.muted }}>· {heroPick.distMi.toFixed(1)} mi</span>}
+                    {rollHistory.length > 0 && (
+                      <div style={{ marginTop: 14 }}>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>Your rolls</div>
+                        {rollHistory.map((rp, i) => (
+                          <div key={rp.id + "-" + i} onClick={() => openDetail(rp)} style={{ display: "flex", alignItems: "center", gap: 10, background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 10px", marginBottom: 7, cursor: "pointer" }}>
+                            <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: "50%", background: C.adim, color: C.accent, fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{rollHistory.length - i}</span>
+                            <FallbackImg src={rp.photo} icon="🍽️" style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{rp.name}</div>
+                              <div style={{ display: "flex", gap: 6, marginTop: 2, alignItems: "center" }}>
+                                {rp.rating && <span style={{ fontSize: 11, color: "#F59E0B" }}>★ {rp.rating}</span>}
+                                {rp.distMi != null && <span style={{ fontSize: 11, color: C.muted }}>· {rp.distMi.toFixed(1)} mi</span>}
+                              </div>
+                            </div>
+                            <span style={{ color: C.muted, fontSize: 16, flexShrink: 0 }}>›</span>
+                          </div>
+                        ))}
                       </div>
-                      {heroReason && <div style={{ fontSize: 14, color: C.light, lineHeight: 1.5, marginTop: 10 }}><span style={{ color: C.accent }}>✨ </span>{heroReason}</div>}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 10, padding: "0 16px 16px" }}>
-                    <button onClick={() => openDetail(heroPick)} style={{ flex: 2, background: C.accent, color: "#0D1117", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 800, padding: "13px 0", cursor: "pointer" }}>Take me there →</button>
-                    {heroOrder.length > 1 && (
-                      <button onClick={() => setHeroNonce((n) => n + 1)} style={{ flex: 1, background: "transparent", color: C.accent, border: `1.5px solid ${C.accent}`, borderRadius: 12, fontSize: 13.5, fontWeight: 800, padding: "13px 0", cursor: "pointer" }}>Another angle</button>
                     )}
                   </div>
-                </div>
+                )}
+              </div>
               )}
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 800, color: C.text, marginBottom: 8 }}>Why are you heading out?</div>
@@ -3166,6 +3236,13 @@ function PageInner() {
                   <button key={b.key} onClick={() => { setDetail(null); openExperience(b.key); }} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: C.accent, background: C.adim, border: `1px solid ${C.accent}`, borderRadius: 999, padding: "4px 11px", cursor: "pointer" }}>{b.icon} {b.label}</button>
                 ))}
               </div>
+
+              {(() => { const w = whatToWear(detail, weather); if (!w) return null; return (
+                <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: "12px 14px", marginBottom: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: C.text, marginBottom: 6 }}>👕 What to wear</div>
+                  <div style={{ fontSize: 13, color: C.light, lineHeight: 1.5 }}>{w.dress}{w.wx ? " " + w.wx : ""}</div>
+                </div>
+              ); })()}
 
               {reviewsOpen && (
                 <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: "12px 14px", marginBottom: 14 }}>
