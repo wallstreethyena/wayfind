@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v4.7";
+const BUILD = "v4.8";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -25,15 +25,15 @@ const DEFAULT_CENTER = { lat: 27.5689, lng: -82.4393, name: "Parrish, FL" };
 
 // Intent: Wayfind asks WHY you are going out, then reshapes every pick around it.
 const INTENTS = [
-  { id: "eat", icon: "🍽️", label: "Eat", plans: [{ cat: "food", kw: "" }, { cat: "food", kw: "popular restaurants" }, { cat: "food", kw: "local favorite" }] },
+  { id: "eat", icon: "🍽️", label: "Hungry", plans: [{ cat: "food", kw: "" }, { cat: "food", kw: "popular restaurants" }, { cat: "food", kw: "local favorite" }] },
   { id: "celebrate", icon: "🎉", label: "Celebrate", plans: [{ cat: "food", kw: "upscale restaurant" }, { cat: "nightlife", kw: "cocktail bar" }, { cat: "nightlife", kw: "rooftop bar" }] },
-  { id: "date", icon: "❤️", label: "Date", plans: [{ cat: "food", kw: "romantic restaurant" }, { cat: "nightlife", kw: "cocktail bar" }, { cat: "food", kw: "waterfront" }, { cat: "food", kw: "dessert" }] },
-  { id: "family", icon: "👨‍👩‍👧", label: "Family", plans: [{ cat: "attractions", kw: "family friendly" }, { cat: "food", kw: "family restaurant" }, { cat: "attractions", kw: "park" }] },
-  { id: "kids", icon: "👶", label: "Kids", plans: [{ cat: "attractions", kw: "things to do with kids" }, { cat: "attractions", kw: "playground park" }, { cat: "food", kw: "ice cream" }] },
+  { id: "date", icon: "❤️", label: "Date Night", plans: [{ cat: "food", kw: "romantic restaurant" }, { cat: "nightlife", kw: "cocktail bar" }, { cat: "food", kw: "waterfront" }, { cat: "food", kw: "dessert" }] },
+  { id: "family", icon: "👨‍👩‍👧", label: "Family Time", plans: [{ cat: "attractions", kw: "family friendly" }, { cat: "food", kw: "family restaurant" }, { cat: "attractions", kw: "park" }] },
+  { id: "kids", icon: "👶", label: "With Kids", plans: [{ cat: "attractions", kw: "things to do with kids" }, { cat: "attractions", kw: "playground park" }, { cat: "food", kw: "ice cream" }] },
   { id: "relax", icon: "🌅", label: "Relax", plans: [{ cat: "beach", kw: "" }, { cat: "attractions", kw: "park" }, { cat: "food", kw: "coffee" }] },
-  { id: "night", icon: "🎵", label: "Night out", plans: [{ cat: "nightlife", kw: "bar" }, { cat: "nightlife", kw: "night club" }, { cat: "nightlife", kw: "live music" }] },
-  { id: "work", icon: "💻", label: "Work", plans: [{ cat: "food", kw: "coffee shop wifi" }, { cat: "food", kw: "cafe" }] },
-  { id: "visit", icon: "✈️", label: "Visiting", plans: [{ cat: "attractions", kw: "top attractions" }, { cat: "attractions", kw: "things to do" }, { cat: "attractions", kw: "landmark" }] },
+  { id: "night", icon: "🎵", label: "Night Out", plans: [{ cat: "nightlife", kw: "bar" }, { cat: "nightlife", kw: "night club" }, { cat: "nightlife", kw: "live music" }] },
+  { id: "work", icon: "💻", label: "Work Friendly", plans: [{ cat: "food", kw: "coffee shop wifi" }, { cat: "food", kw: "cafe" }] },
+  { id: "visit", icon: "✈️", label: "Visiting Town", plans: [{ cat: "attractions", kw: "top attractions" }, { cat: "attractions", kw: "things to do" }, { cat: "attractions", kw: "landmark" }] },
 ];
 
 // One line of live context for the header, shaped by weather, time and the week.
@@ -2744,11 +2744,11 @@ function PageInner() {
                     </button>
                   )}
                 </div>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto", WebkitOverflowScrolling: "touch", paddingBottom: 2 }}>
-                  {[{ icon: "🎁", label: "Surprise", go: openSurprise }, { icon: "📍", label: "Nearby", go: () => setMenuSheet("explore") }, { icon: "✨", label: "Occasions", go: () => setMenuSheet("experiences") }, { icon: "📚", label: "Local Events", go: () => setMenuSheet("community") }].map((t) => (
-                    <button key={t.label} onClick={t.go} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 999, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
-                      <span style={{ fontSize: 15, lineHeight: 1 }}>{t.icon}</span>
-                      {t.label}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+                  {[{ icon: "🎁", label: "Surprise", go: openSurprise }, { icon: "📍", label: "Nearby", go: () => setMenuSheet("explore") }, { icon: "✨", label: "Occasions", go: () => setMenuSheet("experiences") }, { icon: "📅", label: "Events", go: () => setMenuSheet("community") }].map((t) => (
+                    <button key={t.label} onClick={t.go} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 5, padding: "11px 3px", borderRadius: 14, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                      <span style={{ fontSize: 20, lineHeight: 1 }}>{t.icon}</span>
+                      <span style={{ whiteSpace: "nowrap" }}>{t.label}</span>
                     </button>
                   ))}
                 </div>
@@ -4037,7 +4037,7 @@ function PageInner() {
                   })}
                   <button onClick={() => { const rc = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)]; setMenuSheet(null); pickCat(rc.id); }} style={{ height: 76, borderRadius: 16, border: `1.5px dashed ${C.accent}`, background: C.adim, color: C.accent, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 800 }}>
                     <span style={{ fontSize: 24, lineHeight: 1 }}>🎲</span>
-                    <span>Surprise category</span>
+                    <span>Surprise Me</span>
                   </button>
                 </div>
               </>
