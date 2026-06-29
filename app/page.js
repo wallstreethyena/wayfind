@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v2.4";
+const BUILD = "v2.5";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -1236,12 +1236,12 @@ function PageInner() {
   const [sub, setSub] = useState("all");
   const [vibe, setVibe] = useState("all");
   const [sortBy, setSortBy] = useState("best");
-  const [searchRadius, setSearchRadius] = useState(24140); // meters, ~15 miles default
+  const [searchRadius, setSearchRadius] = useState(48280); // meters, ~30 miles default
   const [visibleCount, setVisibleCount] = useState(5); // explore list shows 5, then "Wayfind 5 more spots"
   const [radiusSheet, setRadiusSheet] = useState(false);
   const [pendingRadius, setPendingRadius] = useState(24140);
   const [radiusOpen, setRadiusOpen] = useState(false);
-  const [sliderMi, setSliderMi] = useState(15);
+  const [sliderMi, setSliderMi] = useState(30);
   const [showRadiusWheel, setShowRadiusWheel] = useState(false);
   const [showNearbyExp, setShowNearbyExp] = useState(false); // v3.7 Phase 2: ✨ Nearby experiences dropdown in the sort row
   const [sortOpen, setSortOpen] = useState(false);
@@ -1262,6 +1262,7 @@ function PageInner() {
   const [detail, setDetail] = useState(null);
   const [detailExtra, setDetailExtra] = useState(null);
   const [offers, setOffers] = useState({});
+  const [dealsOnly, setDealsOnly] = useState(false);
   const [lightbox, setLightbox] = useState(null);
   const [reviewsOpen, setReviewsOpen] = useState(false);
   const [hoursOpen, setHoursOpen] = useState(false);
@@ -1351,6 +1352,15 @@ function PageInner() {
   const sheetDragRef = useRef({});
   const insightFullCache = useRef({});
   const detailCache = useRef({});
+  const radiusDebounce = useRef(null);
+  function onRadiusSlide(mi) {
+    setSliderMi(mi);
+    if (radiusDebounce.current) clearTimeout(radiusDebounce.current);
+    radiusDebounce.current = setTimeout(() => {
+      const meters = Math.round(mi * 1609.34);
+      setSearchRadius((cur) => (Math.abs(cur - meters) > 800 ? meters : cur));
+    }, 650);
+  }
   // Engagement signals — stored in localStorage, used to personalise the feed.
   const [signals, setSignals] = useState(() => { try { if (typeof window === "undefined") return []; return loadSignals(); } catch { return []; } });
   const [liked, setLiked] = useState(() => { try { return JSON.parse(localStorage.getItem("wf_liked") || "{}"); } catch { return {}; } });
@@ -1763,6 +1773,7 @@ function PageInner() {
     setDetail(p);
     setDetailContext(context || null);
     recordSignal(p, "open"); // implicit engagement signal
+    try { if (OFFERS[p.id]) logEvent("offer_impression", p, { offer_id: OFFERS[p.id].id }); } catch (e) {}
     try { recentRef.current = [p.id, ...recentRef.current.filter((x) => x !== p.id)].slice(0, 20); } catch {}
     setReviewsOpen(false);
     setHoursOpen(false);
@@ -2599,9 +2610,10 @@ function PageInner() {
   // reachable through the "See all" chip, so the registry is still one source of
   // truth without flooding the home row.
   const HOME_CHIPS = ["localfav", "gem", "value", "instagram", "waterfront", "livemusic", "family", "romantic", "outdoor", "breakfast", "coffee"].filter((k) => EXPERIENCES[k]);
-  const view = sortBy === "near"
+  const viewBase = sortBy === "near"
     ? [...places].filter((p) => sliderMi >= 30 || p.distMi == null || p.distMi <= sliderMi).sort((a, b) => (a.distMi ?? 1e12) - (b.distMi ?? 1e12))
     : [...places].sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0));
+  const view = dealsOnly ? viewBase.filter((p) => offers[p.id]) : viewBase;
 
   const exploreList = (
     <>
@@ -2628,11 +2640,11 @@ function PageInner() {
         <div style={{ padding: "0 2px 10px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <button onClick={() => setSortBy("best")} style={{ padding: "6px 14px", borderRadius: 999, border: `1.5px solid ${sortBy === "best" ? C.accent : C.border}`, background: sortBy === "best" ? C.accent : "transparent", color: sortBy === "best" ? "#0D1117" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>⭐ Best</button>
-            <button onClick={() => { if (sortBy !== "near") { setSortBy("near"); setSliderMi(Math.min(30, Math.max(1, Math.round(searchRadius / 1609.34)))); setRadiusOpen(true); } else { setRadiusOpen((o) => !o); } }} style={{ padding: "6px 14px", borderRadius: 999, border: `1.5px solid ${sortBy === "near" ? C.accent : C.border}`, background: sortBy === "near" ? C.accent : "transparent", color: sortBy === "near" ? "#0D1117" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>📍 Closest</button>
+            <button onClick={() => { if (sortBy !== "near") { setSortBy("near"); setSliderMi(Math.min(30, Math.max(1, Math.round(searchRadius / 1609.34)))); setRadiusOpen(true); } else { setRadiusOpen((o) => !o); } }} style={{ padding: "6px 14px", borderRadius: 999, border: `1.5px solid ${sortBy === "near" ? C.accent : C.border}`, background: sortBy === "near" ? C.accent : "transparent", color: sortBy === "near" ? "#0D1117" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>📍 Closest</button>{Object.keys(offers).length > 0 && <button onClick={() => setDealsOnly((d) => !d)} style={{ marginLeft: 8, padding: "6px 13px", borderRadius: 999, border: `1.5px solid ${dealsOnly ? C.accent : C.border}`, background: dealsOnly ? C.accent : "transparent", color: dealsOnly ? "#0D1117" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>🏷️ Deals</button>}
             <button onClick={() => setShowNearbyExp((o) => !o)} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5, padding: "6px 14px", borderRadius: 999, border: `1.5px solid ${showNearbyExp ? C.accent : C.border}`, background: showNearbyExp ? C.adim : "transparent", color: showNearbyExp ? C.accent : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Refine {showNearbyExp ? "▲" : "▼"}</button>
           </div>
           {sortBy === "near" && radiusOpen && (
-            <div style={{ marginTop: 10 }}><RadiusSlider mi={sliderMi} onChange={setSliderMi} where={locName ? locName.split(",")[0] : "you"} /></div>
+            <div style={{ marginTop: 10 }}><RadiusSlider mi={sliderMi} onChange={onRadiusSlide} where={locName ? locName.split(",")[0] : "you"} /></div>
           )}
           {showNearbyExp && (
             <div style={{ marginTop: 10, padding: 14, background: C.card, border: `1px solid ${C.border}`, borderRadius: 14 }}>
@@ -2975,7 +2987,8 @@ function PageInner() {
             heroWhy.push("strong " + whyPick + " pick");
           }
           const feedList0 = heroPick ? displayList.filter((p) => p && p.id !== heroPick.id) : displayList;
-          const feedList = sortBy === "near" ? feedList0.filter((p) => p && (sliderMi >= 30 || p.distMi == null || p.distMi <= sliderMi)) : feedList0;
+          const feedListN = sortBy === "near" ? feedList0.filter((p) => p && (sliderMi >= 30 || p.distMi == null || p.distMi <= sliderMi)) : feedList0;
+          const feedList = dealsOnly ? feedListN.filter((p) => offers[p.id]) : feedListN;
           // Trust fix (v4.3): closed places no longer hold the top slots. Sort by the
           // chosen order first (score for Best, distance for Closest), then stably push
           // open-now to the top, unknown-status next, opens-later below that, and closed
@@ -3091,12 +3104,12 @@ function PageInner() {
                   <div style={{ fontSize: 15, fontWeight: 800, color: C.text }}>Your picks</div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <button onClick={() => setSortBy("best")} style={{ padding: "6px 13px", borderRadius: 999, border: `1.5px solid ${sortBy === "best" ? C.accent : C.border}`, background: sortBy === "best" ? C.accent : "transparent", color: sortBy === "best" ? "#0D1117" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>⭐ Best</button>
-                    <button onClick={() => { if (sortBy !== "near") { setSortBy("near"); setSliderMi(Math.min(30, Math.max(1, Math.round(searchRadius / 1609.34)))); setRadiusOpen(true); } else { setRadiusOpen((o) => !o); } }} style={{ padding: "6px 13px", borderRadius: 999, border: `1.5px solid ${sortBy === "near" ? C.accent : C.border}`, background: sortBy === "near" ? C.accent : "transparent", color: sortBy === "near" ? "#0D1117" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>📍 Closest</button>
+                    <button onClick={() => { if (sortBy !== "near") { setSortBy("near"); setSliderMi(Math.min(30, Math.max(1, Math.round(searchRadius / 1609.34)))); setRadiusOpen(true); } else { setRadiusOpen((o) => !o); } }} style={{ padding: "6px 13px", borderRadius: 999, border: `1.5px solid ${sortBy === "near" ? C.accent : C.border}`, background: sortBy === "near" ? C.accent : "transparent", color: sortBy === "near" ? "#0D1117" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>📍 Closest</button>{Object.keys(offers).length > 0 && <button onClick={() => setDealsOnly((d) => !d)} style={{ marginLeft: 8, padding: "6px 13px", borderRadius: 999, border: `1.5px solid ${dealsOnly ? C.accent : C.border}`, background: dealsOnly ? C.accent : "transparent", color: dealsOnly ? "#0D1117" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>🏷️ Deals</button>}
                   </div>
                 </div>
               )}
               {!suggestedLoading && suggested !== null && list.length > 0 && sortBy === "near" && radiusOpen && (
-                <div style={{ marginBottom: 10 }}><RadiusSlider mi={sliderMi} onChange={setSliderMi} where={locName ? locName.split(",")[0] : "you"} /></div>
+                <div style={{ marginBottom: 10 }}><RadiusSlider mi={sliderMi} onChange={onRadiusSlide} where={locName ? locName.split(",")[0] : "you"} /></div>
               )}
               {!suggestedLoading && suggested !== null && homeFeed.slice(0, 4).map((p, i) => (
                 <PlaceCard key={p.id} p={p} rank={i + 1} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => quickSaveFavorite(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} />
@@ -3881,6 +3894,7 @@ function PageInner() {
                     {o.expiration_date && <div style={{ fontSize: 11.5, color: C.muted, marginTop: 4 }}>Through {o.expiration_date}</div>}
                     {(o.affiliate_url || o.direct_url) && <a href={o.affiliate_url || o.direct_url} target="_blank" rel="noreferrer" onClick={() => logEvent("offer_redeem", detail, { offer_id: o.id, source: o.source })} style={{ display: "block", textAlign: "center", marginTop: 10, padding: 12, background: C.accent, borderRadius: 12, color: "#0D1117", fontSize: 14.5, fontWeight: 800, textDecoration: "none" }}>{o.coupon_code ? "Show code" : "View offer ↗"}</a>}
                     {o.coupon_code && <div style={{ textAlign: "center", fontSize: 13, fontWeight: 800, color: C.accent, marginTop: 8, letterSpacing: "0.5px" }}>Code: {o.coupon_code}</div>}
+                    <div onClick={() => { logEvent("offer_report", detail, { offer_id: o.id }); showToast("Thanks, we will take a look"); }} style={{ textAlign: "center", fontSize: 11, color: C.muted, marginTop: 10, cursor: "pointer", textDecoration: "underline" }}>Report an issue</div>
                   </div>
                 );
               })()}
