@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v2.0";
+const BUILD = "v2.1";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -1949,7 +1949,11 @@ function PageInner() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const listsHydrated = useRef(false);
   useEffect(() => {
+    // Skip the first run so default empty lists never overwrite real saved data
+    // before the load effect above has hydrated from localStorage.
+    if (!listsHydrated.current) { listsHydrated.current = true; return; }
     try { localStorage.setItem("wayfind_lists", JSON.stringify(lists)); } catch {}
   }, [lists]);
 
@@ -2436,10 +2440,13 @@ function PageInner() {
   }
 
   function saveToList(listId) {
-    const l = lists[listId];
-    if (!l || !saveTarget) return;
-    const has = l.places.some((p) => p.id === saveTarget.id);
-    setLists({ ...lists, [listId]: { ...l, places: has ? l.places.filter((p) => p.id !== saveTarget.id) : [...l.places, saveTarget] } });
+    if (!saveTarget) return;
+    setLists((prev) => {
+      const l = prev[listId];
+      if (!l) return prev;
+      const has = l.places.some((p) => p.id === saveTarget.id);
+      return { ...prev, [listId]: { ...l, places: has ? l.places.filter((p) => p.id !== saveTarget.id) : [...l.places, saveTarget] } };
+    });
     setSaveTarget(null);
   }
   // One-tap save straight to Favorites from a card heart.
@@ -2447,7 +2454,11 @@ function PageInner() {
     if (!p) return;
     const fav = lists.favorites || { id: "favorites", name: "Favorites", emoji: "❤️", places: [] };
     const has = fav.places.some((x) => x.id === p.id);
-    setLists({ ...lists, favorites: { ...fav, places: has ? fav.places.filter((x) => x.id !== p.id) : [...fav.places, p] } });
+    setLists((prev) => {
+      const f = prev.favorites || { id: "favorites", name: "Favorites", emoji: "❤️", places: [] };
+      const h = f.places.some((x) => x.id === p.id);
+      return { ...prev, favorites: { ...f, places: h ? f.places.filter((x) => x.id !== p.id) : [...f.places, p] } };
+    });
     showToast(has ? "Removed from Favorites" : "❤️ Saved to Favorites");
     if (!has) logEvent("save", p);
     if (supabase && user) {
@@ -2462,13 +2473,12 @@ function PageInner() {
   function saveHookList(hook, places) {
     if (!hook || !places || !places.length) return;
     const key = "hook_" + hook.id;
-    if (lists[key]) {
-      const next = { ...lists }; delete next[key]; setLists(next);
-      showToast("Removed from your lists");
-    } else {
-      setLists({ ...lists, [key]: { id: key, name: hook.themeTitle || hook.hook || "Saved list", emoji: hook.emoji || "✨", places: places.map((x) => x) } });
-      showToast("❤️ Saved to your lists");
-    }
+    const existed = !!lists[key];
+    setLists((prev) => {
+      if (prev[key]) { const next = { ...prev }; delete next[key]; return next; }
+      return { ...prev, [key]: { id: key, name: hook.themeTitle || hook.hook || "Saved list", emoji: hook.emoji || "✨", places: places.map((x) => x) } };
+    });
+    showToast(existed ? "Removed from your lists" : "❤️ Saved to your lists");
   }
   // Heart on a recommendation card: like it AND save the full list to Favorites.
   function onHookHeart(hookId) {
@@ -2485,14 +2495,12 @@ function PageInner() {
     const name = newName.trim();
     if (!name) return;
     const id = "list_" + Date.now();
-    setLists({ ...lists, [id]: { id, name, emoji: newEmoji, places: [] } });
+    setLists((prev) => ({ ...prev, [id]: { id, name, emoji: newEmoji, places: [] } }));
     setNewName(""); setNewEmoji("⭐"); setNewListOpen(false);
   }
   function deleteList(id) {
     if (id === "favorites") return;
-    const next = { ...lists };
-    delete next[id];
-    setLists(next);
+    setLists((prev) => { const next = { ...prev }; delete next[id]; return next; });
     setActiveList(null);
   }
   // Build a shareable link. With Supabase we store the list and share a short
@@ -2686,6 +2694,7 @@ function PageInner() {
           </div>
           <button onClick={submitSearch} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(180deg, #FB923C 0%, #F97316 52%, #EA580C 100%)", border: "none", borderRadius: 12, color: "#fff", fontSize: 14, fontWeight: 800, padding: "0 16px", height: 48, cursor: "pointer", whiteSpace: "nowrap", boxShadow: "0 2px 10px rgba(249,115,22,.4)" }}>Wayfind It</button>
         </div>
+        {screen === "suggested" && (
         <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 9, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
           <span style={{ fontSize: 11.5, fontWeight: 700, color: C.muted, flexShrink: 0 }}>Featured:</span>
           {FEATURED_AREAS.map((a) => (
@@ -2694,6 +2703,7 @@ function PageInner() {
             </button>
           ))}
         </div>
+        )}
       </div>
 
       {/* Category tabs (Explore + Map). Hidden on home, where the app-tile grid replaces it. */}
@@ -3135,7 +3145,7 @@ function PageInner() {
           }
           return (
             <div>
-              <div onClick={() => setScreen("explore")} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: C.accent, fontWeight: 700, fontSize: 13, cursor: "pointer", padding: "4px 2px 10px" }}>‹ Back</div>
+              <div onClick={() => setScreen("suggested")} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: C.accent, fontWeight: 700, fontSize: 13, cursor: "pointer", padding: "4px 2px 10px" }}>‹ Back</div>
               <div style={{ paddingBottom: 6 }}>
                 <div style={{ fontSize: 24, fontWeight: 800, color: C.text }}>✨ Your {period} Pick</div>
                 <div style={{ fontSize: 13, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>{sSub}</div>
@@ -3175,6 +3185,10 @@ function PageInner() {
                     </div>
                   </div>
                   <button onClick={primaryAction} style={{ width: "100%", marginTop: 12, background: C.accent, color: "#0D1117", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 800, padding: "14px 0", cursor: "pointer" }}>{primaryLabel}</button>
+                  <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+                    <button onClick={() => shareLink(p.name, (typeof window !== "undefined" ? window.location.origin : "") + "?place=" + encodeURIComponent(p.id), () => { setShareCopied(true); setTimeout(() => setShareCopied(false), 1800); }, "Check out " + p.name + " on Wayfind")} style={{ flex: 1, background: "transparent", color: C.light, border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 13.5, fontWeight: 700, padding: "12px 0", cursor: "pointer" }}>{shareCopied ? "Copied ✓" : "↗ Share"}</button>
+                    <button onClick={() => quickSaveFavorite(p)} style={{ flex: 1, background: isSaved(p.id) ? C.adim : "transparent", color: isSaved(p.id) ? C.accent : C.light, border: `1px solid ${isSaved(p.id) ? C.accent : C.border}`, borderRadius: 12, fontSize: 13.5, fontWeight: 800, padding: "12px 0", cursor: "pointer" }}>{isSaved(p.id) ? "♥ Saved" : "♡ Save"}</button>
+                  </div>
                   <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
                     {!sOpen && openAlt ? (
                       <button onClick={() => setSurprisePick(openAlt)} style={{ flex: 1, background: "transparent", color: C.green, border: `1.5px solid ${C.green}`, borderRadius: 12, fontSize: 13.5, fontWeight: 800, padding: "12px 0", cursor: "pointer" }}>Find open now</button>
