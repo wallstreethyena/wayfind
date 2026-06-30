@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v4.2";
+const BUILD = "v4.3";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -895,32 +895,138 @@ function todayHours(extra) {
   return after || null;
 }
 
+// ─── Event tiles: control the frame ──────────────────────────────────────────
+// Scraped event flyers (Google and similar) are blurry, dark, and text-heavy,
+// and we cannot judge image quality from a URL. So we trust art only from
+// ticketing sources that supply clean images; everything else gets a branded
+// category tile instead of a bad flyer.
+function eventUseImage(e) {
+  if (!e || !e.image) return false;
+  const src = (e.source || "").toLowerCase();
+  if (src.includes("ticket")) return true;
+  return false;
+}
+// CTA matched to the event, not a blanket "Get tickets" on free community events.
+function eventCTA(e) {
+  const url = e && e.url ? String(e.url) : "";
+  if (!url) return { show: false, label: "" };
+  const u = url.toLowerCase();
+  const src = (e.source || "").toLowerCase();
+  const ticketHost = /ticketmaster|eventbrite|seatgeek|axs\.com|stubhub|ticketweb|etix|dice\.fm|tickets\./.test(u);
+  if (e.ticketed === true || ticketHost) return { show: true, label: "Get tickets ↗" };
+  if (e.ticketed === false) return { show: true, label: "View details ↗" };
+  if (src.includes("google") || u.includes("google.")) return { show: true, label: "View on Google ↗" };
+  return { show: true, label: "View details ↗" };
+}
+// Trim trailing ", City, ST" / ", ST" noise so venues read cleanly on one line.
+function cleanVenueName(v) {
+  if (!v) return "";
+  let s = String(v).trim();
+  s = s.replace(/,\s*[A-Za-z .'-]+,\s*[A-Z]{2}(\s+\d{5})?$/, "");
+  s = s.replace(/,\s*[A-Z]{2}(\s+\d{5})?$/, "");
+  return s.trim();
+}
+function normEvtKey(e) {
+  const n = (e && e.name ? e.name : "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const v = (e && e.venue ? e.venue : "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  return n + "|" + v;
+}
+// Collapse recurring events (same title + venue) into one card. When a single
+// date is selected we keep them separate; otherwise merge and surface the days.
+function dedupeEvents(list, mergeDates) {
+  const groups = new Map();
+  (list || []).forEach((e) => {
+    if (!e) return;
+    const k = mergeDates ? normEvtKey(e) : normEvtKey(e) + "|" + (e.date || "");
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(e);
+  });
+  const out = [];
+  groups.forEach((arr) => {
+    const sorted = arr.slice().sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+    const rep = { ...sorted[0] };
+    rep._dates = [...new Set(sorted.map((x) => x.date).filter(Boolean))];
+    rep._days = [...new Set(sorted.map((x) => formatEventDate(x.date, x.time).wd).filter(Boolean))];
+    out.push(rep);
+  });
+  out.sort((a, b) => ((a._dates && a._dates[0]) || a.date || "").localeCompare((b._dates && b._dates[0]) || b.date || ""));
+  return out;
+}
+function recurrenceLabel(e) {
+  const dates = (e && e._dates) || (e && e.date ? [e.date] : []);
+  const days = (e && e._days) || [];
+  if (!dates || dates.length <= 1) return null;
+  if (days.length === 1) return days[0] + " · " + dates.length + " dates";
+  if (days.length === 2) return days[0] + " & " + days[1];
+  if (days.length === 3) return days.join(", ");
+  return dates.length + " dates";
+}
+// Image area: real art only when trusted, otherwise a branded category tile.
+// Richer category for the tile + badge. Ticketmaster segments are trusted as-is;
+// generic "Event"/"Other" records get a category inferred from the title so the
+// branded tile is on-theme (food, outdoors, nightlife) instead of all identical.
+function eventCategory(e) {
+  const seg = eventSegmentMeta(e && e.segment, e && e.genre);
+  if (seg.short && seg.short !== "Other" && seg.short !== "Event") return seg;
+  const t = ((e && e.name) || "").toLowerCase();
+  const has = (re) => re.test(t);
+  if (has(/\b(wine|beer|brewery|cocktail|happy hour|pub|tap ?room|tasting|spirits|nightlife|club|dj|martini)\b/)) return { icon: "🍷", short: "Nightlife", color: "#F472B6" };
+  if (has(/\b(food|truck|taste|culinary|bbq|brunch|dinner|chef|eats|dining|feast|pizza|seafood)\b/)) return { icon: "🍔", short: "Food", color: "#F97316" };
+  if (has(/\b(trail|park|hike|outdoor|cleanup|clean-up|workday|garden|nature|beach|kayak|paddle|fishing)\b/)) return { icon: "🌳", short: "Outdoors", color: "#22C55E" };
+  if (has(/\b(market|farmers|craft|vendor|flea|bazaar|artisan|swap)\b/)) return { icon: "🛒", short: "Market", color: "#2DD4BF" };
+  if (has(/\b(kids|family|children|child|story ?time|teen)\b/)) return { icon: "👪", short: "Family", color: "#22C55E" };
+  if (has(/\b(art|gallery|exhibit|paint|sculpt|museum|pottery)\b/)) return { icon: "🎨", short: "Arts", color: "#A78BFA" };
+  if (has(/\b(music|concert|live|band|jazz|acoustic|symphony|karaoke|open mic)\b/)) return { icon: "🎵", short: "Live", color: "#F472B6" };
+  if (has(/\b(run|race|5k|10k|marathon|sport|tournament|yoga|fitness|cycling|golf)\b/)) return { icon: "🏃", short: "Active", color: "#38BDF8" };
+  return seg;
+}
+function EventArt({ e, seg, height }) {
+  const [bad, setBad] = useState(false);
+  const acc = (seg && seg.color) || C.accent;
+  if (eventUseImage(e) && !bad) {
+    return <img src={e.image} alt="" loading="lazy" draggable={false} onError={() => setBad(true)} onLoad={(ev) => { try { if (ev.target && ev.target.naturalWidth && ev.target.naturalWidth < 320) setBad(true); } catch {} }} style={{ width: "100%", height, objectFit: "cover", display: "block" }} />;
+  }
+  return (
+    <div style={{ width: "100%", height, position: "relative", overflow: "hidden", background: `linear-gradient(135deg, ${acc}30 0%, #131A24 56%, #0D1117 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ position: "absolute", top: -24, right: -24, width: 110, height: 110, borderRadius: "50%", background: `radial-gradient(circle, ${acc}33 0%, transparent 70%)`, pointerEvents: "none" }} />
+      <div style={{ fontSize: 42, lineHeight: 1, opacity: 0.95 }}>{seg ? seg.icon : null}</div>
+      <div style={{ position: "absolute", bottom: 7, left: 10, fontSize: 9.5, fontWeight: 800, letterSpacing: "0.7px", textTransform: "uppercase", color: acc, opacity: 0.92 }}>{seg ? seg.short : "Event"}</div>
+    </div>
+  );
+}
 function EventCard({ e, onVenue }) {
   const f = formatEventDate(e.date, e.time);
-  const seg = eventSegmentMeta(e.segment, e.genre);
+  const seg = eventCategory(e);
+  const rec = recurrenceLabel(e);
+  const venue = cleanVenueName(e.venue);
+  const cta = eventCTA(e);
   return (
     <div style={{ display: "flex", flexDirection: "column", background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden" }}>
       <div style={{ position: "relative" }}>
-        <FallbackImg src={e.image} icon={seg.icon} style={{ width: "100%", height: 112, objectFit: "cover", display: "block" }} />
-        <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(13,17,23,.85)", borderRadius: 8, padding: "3px 7px", textAlign: "center", minWidth: 36 }}>
+        <EventArt e={e} seg={seg} height={120} />
+        <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(13,17,23,.85)", borderRadius: 8, padding: "3px 7px", textAlign: "center", minWidth: 36, backdropFilter: "blur(3px)" }}>
           <div style={{ fontSize: 9, fontWeight: 800, color: C.accent, textTransform: "uppercase", letterSpacing: "0.5px" }}>{f.mo}</div>
           <div style={{ fontSize: 16, fontWeight: 800, color: "#fff", lineHeight: 1 }}>{f.day}</div>
         </div>
-        {(e.segment || e.genre) && <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(13,17,23,.85)", color: seg.color, borderRadius: 999, padding: "3px 8px", fontSize: 10, fontWeight: 800 }}>{seg.icon} {seg.short}</div>}
+        {(e.segment || e.genre) && <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(13,17,23,.85)", color: seg.color, borderRadius: 999, padding: "3px 8px", fontSize: 10, fontWeight: 800, backdropFilter: "blur(3px)" }}>{seg.icon} {seg.short}</div>}
       </div>
       <div style={{ padding: "9px 10px 11px", display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{e.name}</div>
-        {e.venue && (
-          <button onClick={() => onVenue && onVenue()} style={{ textAlign: "left", background: "transparent", border: "none", padding: 0, marginTop: 4, fontSize: 11.5, fontWeight: 700, color: C.accent, cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>📍 {e.venue} ›</button>
+        {venue && (
+          <button onClick={() => onVenue && onVenue()} style={{ textAlign: "left", background: "transparent", border: "none", padding: 0, marginTop: 4, fontSize: 11.5, fontWeight: 700, color: C.accent, cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>📍 {venue} ›</button>
         )}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 5, alignItems: "center" }}>
-          {f.wd && <span style={{ fontSize: 11, color: C.muted }}>{f.wd}</span>}
-          {f.time && <span style={{ fontSize: 11, color: C.muted }}>· {f.time}</span>}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 5, alignItems: "center" }}>
+          {rec
+            ? <span style={{ fontSize: 10, fontWeight: 800, color: C.accent, background: C.adim, borderRadius: 999, padding: "2px 8px", whiteSpace: "nowrap" }}>↻ {rec}</span>
+            : (f.wd && <span style={{ fontSize: 11, color: C.muted }}>{f.wd}</span>)}
+          {f.time && <span style={{ fontSize: 11, color: C.muted }}>{rec ? "" : "· "}{f.time}</span>}
         </div>
         {e.price && <div style={{ fontSize: 11.5, fontWeight: 700, color: C.green, marginTop: 4 }}>{e.price}</div>}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8, gap: 6 }}>
-          <a href={e.url} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, fontWeight: 800, color: C.accent, textDecoration: "none" }}>{e.ticketed === false ? "Details ↗" : "Get tickets ↗"}</a>
-          {e.source && <span style={{ fontSize: 9.5, color: C.muted, fontWeight: 600 }}>{e.source}</span>}
+        <div style={{ marginTop: "auto", paddingTop: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+          {cta.show
+            ? <a href={e.url} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, fontWeight: 800, color: C.accent, textDecoration: "none" }}>{cta.label}</a>
+            : <span />}
+          {e.source && <span style={{ fontSize: 9, color: C.muted, fontWeight: 600, opacity: 0.75 }}>{e.source}</span>}
         </div>
       </div>
     </div>
@@ -3327,7 +3433,7 @@ function PageInner() {
                     <span onClick={() => setScreen("events")} style={{ fontSize: 12.5, fontWeight: 700, color: C.accent, cursor: "pointer" }}>See all ↗</span>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                    {foryouEvents.slice(0, 6).map((e) => {
+                    {dedupeEvents(foryouEvents, true).slice(0, 6).map((e) => {
                       const f = formatEventDate(e.date, e.time);
                       const evRel = (() => { if (!e.date) return null; const ed = new Date(e.date + "T00:00:00"); const t0 = new Date(); t0.setHours(0, 0, 0, 0); const diff = Math.round((ed - t0) / 86400000); if (diff <= 0) return "Tonight"; if (diff === 1) return "Tomorrow"; if (diff <= 6 && (ed.getDay() === 6 || ed.getDay() === 0)) return "This weekend"; return null; })();
                       return (
@@ -3434,7 +3540,7 @@ function PageInner() {
                         <span onClick={() => setScreen("events")} style={{ fontSize: 12, fontWeight: 700, color: C.accent, cursor: "pointer" }}>See all ↗</span>
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                        {foryouEvents.slice(0, 6).map((e) => {
+                        {dedupeEvents(foryouEvents, true).slice(0, 6).map((e) => {
                           const f = formatEventDate(e.date, e.time);
                           return (
                             <div key={e.id} onClick={() => openVenue(e)} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 10, cursor: "pointer" }}>
@@ -3778,6 +3884,7 @@ function PageInner() {
           let shown = all;
           if (eventCat !== "all") shown = shown.filter((e) => eventSegmentMeta(e.segment, e.genre).short === eventCat);
           if (eventDate !== "all") shown = shown.filter((e) => e.date === eventDate);
+          shown = dedupeEvents(shown, eventDate === "all");
           const eventDateChips = [];
           const enow = new Date();
           for (let i = 0; i < 28; i++) {
@@ -3847,7 +3954,7 @@ function PageInner() {
                 </div>
               )}
               {!eventsLoading && !eventsUnavailable && !eventsError && shown.length > 0 && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, paddingBottom: "calc(env(safe-area-inset-bottom) + 24px)" }}>
                   {shown.map((e) => <EventCard key={e.id} e={e} onVenue={() => openVenue(e)} />)}
                 </div>
               )}
