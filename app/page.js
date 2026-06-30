@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v6.12";
+const BUILD = "v6.13";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -3765,17 +3765,7 @@ function PageInner() {
                   </div>
                   <span style={{ marginLeft: "auto", color: C.accent, fontSize: 20 }}>›</span>
                 </button>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "0 2px 9px" }}>
-                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.7, textTransform: "uppercase", color: C.muted }}>Discover {locName ? locName.split(",")[0] : "your area"}</div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
-                  {[{ icon: "🎁", label: "Surprise", go: openSurprise }, { icon: "📍", label: "Nearby", go: () => setMenuSheet("explore") }, { icon: "✨", label: "Occasions", go: () => setMenuSheet("experiences") }, { icon: "📅", label: "Events", go: () => setMenuSheet("community") }].map((t) => (
-                    <button key={t.label} onClick={t.go} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 5, padding: "11px 3px", borderRadius: 14, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
-                      <span style={{ fontSize: 20, lineHeight: 1 }}>{t.icon}</span>
-                      <span style={{ whiteSpace: "nowrap" }}>{t.label}</span>
-                    </button>
-                  ))}
-                </div>
+                {/* v6.13: the "Discover" 4-tile grid was removed. It was redundant: Surprise = the dice (in feed + mood menu), Nearby = the feed + category browse, Events = bottom nav. The one non-redundant entry, Occasions, now lives behind the mood button so it is not orphaned. One door to explore, the feed below it. */}
                 {weather && (
                   <button onClick={() => setMenuSheet("weather")} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, background: `linear-gradient(120deg, ${C.blue}1F 0%, ${C.card} 58%)`, border: `1px solid ${C.border}`, borderRadius: 14, padding: "10px 14px", marginTop: 10, cursor: "pointer", textAlign: "left" }}>
                     <img src={"/wx/" + (weather.img || "cloudy") + ".png"} alt="" style={{ height: 42, width: "auto", flexShrink: 0, display: "block" }} />
@@ -5127,6 +5117,10 @@ function PageInner() {
                     );
                   })}
                 </div>
+                <button onClick={() => setMenuSheet("experiences")} style={{ width: "100%", marginTop: 10, height: 56, borderRadius: 16, border: `1px solid ${C.border}`, background: C.card, color: C.text, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, fontSize: 15, fontWeight: 800 }}>
+                  <span style={{ fontSize: 20 }}>✨</span>
+                  <span>Browse by occasion</span>
+                </button>
                 <button onClick={() => { setMenuSheet(null); openSurprise(); }} style={{ width: "100%", marginTop: 12, height: 62, borderRadius: 16, border: `1.5px solid ${C.accent}`, background: `linear-gradient(150deg, ${C.adim} 0%, ${C.card} 70%)`, color: C.accent, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, fontSize: 15, fontWeight: 800 }}>
                   <span style={{ fontSize: 20 }}>🎲</span>
                   <span>Can't decide? Let's Wayfind it</span>
