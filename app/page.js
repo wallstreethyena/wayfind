@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v6.3";
+const BUILD = "v6.4";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -2654,6 +2654,19 @@ function PageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen, center, weather, intent]);
 
+  // When the searched location changes, drop the AI hooks built for the previous
+  // place so the home cards never keep recommending where you used to be. They
+  // fall back to fresh generateHooks() until new AI hooks load for the new spot.
+  useEffect(() => {
+    setAiHooks(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [center && center.lat, center && center.lng]);
+
+  // Signature of the place set the hooks are grounded on. Changes whenever the
+  // actual places change (a new location search), even if the count is the same,
+  // so the AI hook fetch re-runs for the new spot instead of keeping stale cards.
+  const hookSrcSig = ((suggested && suggested.length > 0 ? suggested : places) || []).filter(Boolean).slice(0, 20).map((p) => p && p.id).join("|");
+
   // Fetch AI-generated hooks once we have real place data to ground them on.
   // Falls back to the static generateHooks() output if the API call fails.
   useEffect(() => {
@@ -2678,7 +2691,7 @@ function PageInner() {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [suggested && suggested.length, places && places.length]);
+  }, [hookSrcSig]);
 
   // Lightweight events strip for the For You screen. Fail-soft: any error just
   // hides the strip and never blocks the picks.
