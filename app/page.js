@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v6.17";
+const BUILD = "v6.18";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -4587,38 +4587,36 @@ function PageInner() {
               })()}
               {!detail._event && (() => { const dv = decisionReason(detail).verdict; return dv ? <div style={{ fontSize: 15.5, fontWeight: 800, color: C.text, lineHeight: 1.36, marginBottom: 13, letterSpacing: "-0.2px" }}><span style={{ color: C.accent }}>Wayfind take: </span>{dv}</div> : null; })()}
               {/* Verdict: one consistent row of the things that decide whether to go */}
-              <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginBottom: 13 }}>
-                {(() => { const sl = scoreLabel(detail.wfScore); return sl ? <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, background: C.accent, color: "#0D1117", borderRadius: 999, padding: "5px 12px", fontWeight: 800 }}><span style={{ fontSize: 14 }}>{sl.s}</span><span style={{ fontSize: 10.5, fontWeight: 800, opacity: .8 }}>/ 10</span></span> : null; })()}
-                {detail.rating != null && (
-                  <button onClick={() => { if (!(detail.reviews > 0)) return; const n = !reviewsOpen; setReviewsOpen(n); if (n) loadFullInsight(detail, detailExtra); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: "5px 11px", cursor: detail.reviews > 0 ? "pointer" : "default" }}>
-                    <span style={{ color: "#F59E0B", fontSize: 12.5 }}>★</span>
-                    <span style={{ fontSize: 12.5, fontWeight: 800, color: C.text }}>{detail.rating}</span>
-                    {detail.reviews > 0 && <span style={{ fontSize: 11.5, color: C.muted }}>({detail.reviews.toLocaleString()}) {reviewsOpen ? "▴" : "▾"}</span>}
-                  </button>
-                )}
-                {detail.openNow != null && (
-                  <button onClick={() => setHoursOpen((o) => !o)} style={{ display: "inline-flex", alignItems: "center", gap: 4, borderRadius: 999, padding: "5px 11px", cursor: "pointer", border: `1px solid ${detail._event ? C.border : (detail.openNow ? "rgba(34,197,94,.45)" : "rgba(239,68,68,.45)")}`, background: detail._event ? C.card : (detail.openNow ? "rgba(34,197,94,.14)" : "rgba(239,68,68,.14)"), color: detail._event ? C.muted : (detail.openNow ? C.green : C.red), fontSize: 12.5, fontWeight: 800 }}>{detail._event ? (detail.openNow ? "Venue open" : "Venue closed") : (detail.openNow ? "Open now" : "Closed")} <span style={{ fontSize: 10 }}>{hoursOpen ? "▴" : "▾"}</span></button>
-                )}
-                {detail.distMi != null && <span style={{ display: "inline-flex", alignItems: "center", background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: "5px 11px", fontSize: 12.5, fontWeight: 700, color: C.light }}>{detail.distMi.toFixed(1)} mi</span>}
-                {detail.priceNum != null ? <PriceMeter level={detail.priceNum} word /> : (detail.price && <span style={{ fontSize: 12.5, color: C.green, fontWeight: 800, background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: "5px 11px" }}>{detail.price}</span>)}
+              <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", marginBottom: 14, fontSize: 13, fontWeight: 700 }}>
+                {(() => { const sl = scoreLabel(detail.wfScore); return sl ? <span style={{ color: C.accent, fontWeight: 800 }}>{sl.s}<span style={{ color: C.muted, fontWeight: 700, fontSize: 11.5 }}> / 10</span></span> : null; })()}
+                {detail.rating != null && (<>
+                  <span style={{ color: C.border }}>·</span>
+                  <span onClick={() => { if (!(detail.reviews > 0)) return; const n = !reviewsOpen; setReviewsOpen(n); if (n) loadFullInsight(detail, detailExtra); }} style={{ display: "inline-flex", alignItems: "center", gap: 4, color: C.text, cursor: detail.reviews > 0 ? "pointer" : "default" }}><span style={{ color: "#F59E0B" }}>★</span>{detail.rating}{detail.reviews > 0 && <span style={{ color: C.muted, fontWeight: 600 }}>({detail.reviews.toLocaleString()})</span>}</span>
+                </>)}
+                {detail.openNow != null && (<>
+                  <span style={{ color: C.border }}>·</span>
+                  <span onClick={() => setHoursOpen((o) => !o)} style={{ cursor: "pointer", fontWeight: 800, color: detail._event ? C.muted : (detail.openNow ? C.green : C.red) }}>{detail._event ? (detail.openNow ? "Venue open" : "Venue closed") : (detail.openNow ? "Open now" : "Closed")}</span>
+                </>)}
+                {detail.distMi != null && (<><span style={{ color: C.border }}>·</span><span style={{ color: C.light }}>{detail.distMi.toFixed(1)} mi</span></>)}
+                {detail.priceNum != null ? (<><span style={{ color: C.border }}>·</span><PriceMeter level={detail.priceNum} word /></>) : (detail.price && (<><span style={{ color: C.border }}>·</span><span style={{ color: C.green, fontWeight: 800 }}>{detail.price}</span></>))}
               </div>
               {/* Primary actions, right where you decide. For a closed place, Save leads instead of "go now". */}
               <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
                 {liveOpen(detail) === false ? (
                   <>
-                    <button onClick={() => { setDetail(null); setSaveTarget(detail); }} style={{ flex: 1, padding: "12px 0", background: C.accent, border: "none", borderRadius: 12, color: "#0D1117", fontSize: 14.5, fontWeight: 800, cursor: "pointer" }}>❤️ Save for later</button>
+                    <button onClick={() => { setDetail(null); setSaveTarget(detail); }} style={{ flex: 1, padding: "12px 0", background: C.accent, border: "none", borderRadius: 12, color: "#0D1117", fontSize: 14.5, fontWeight: 800, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20 C12 20 4 14.6 4 9.2 C4 6.4 6.1 4.3 8.6 4.3 C10.3 4.3 11.5 5.4 12 6.5 C12.5 5.4 13.7 4.3 15.4 4.3 C17.9 4.3 20 6.4 20 9.2 C20 14.6 12 20 12 20 Z" /></svg>Save for later</button>
                     <a href={detail.mapsUrl} target="_blank" rel="noreferrer" style={{ flex: 1, padding: "12px 0", background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 14.5, fontWeight: 700, textDecoration: "none", textAlign: "center" }}>Directions ↗</a>
                   </>
                 ) : (
                   <>
                     <a href={detail.mapsUrl} target="_blank" rel="noreferrer" style={{ flex: 1, padding: "12px 0", background: C.accent, borderRadius: 12, color: "#0D1117", fontSize: 14.5, fontWeight: 800, textDecoration: "none", textAlign: "center" }}>Directions ↗</a>
-                    <button onClick={() => { setDetail(null); setSaveTarget(detail); }} style={{ flex: 1, padding: "12px 0", background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 14.5, fontWeight: 700, cursor: "pointer" }}>❤️ Save</button>
+                    <button onClick={() => { setDetail(null); setSaveTarget(detail); }} style={{ flex: 1, padding: "12px 0", background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 14.5, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20 C12 20 4 14.6 4 9.2 C4 6.4 6.1 4.3 8.6 4.3 C10.3 4.3 11.5 5.4 12 6.5 C12.5 5.4 13.7 4.3 15.4 4.3 C17.9 4.3 20 6.4 20 9.2 C20 14.6 12 20 12 20 Z" /></svg>Save</button>
                   </>
                 )}
                 <button onClick={() => { logEvent("share", detail, { kind: "place" }); addShared(detail); shareLink(detail.name, placeShareUrl(detail, locName), () => showToast("Link copied"), `Want to go to ${detail.name} together? Found it on Wayfind`); }} aria-label="Share" style={{ flexShrink: 0, width: 46, padding: "12px 0", background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12" /><path d="M8 7l4-4 4 4" /><path d="M6 12v7a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-7" /></svg></button>
               </div>
               {detail.address && (
-                <a href={detail.mapsUrl} target="_blank" rel="noreferrer" style={{ display: "block", fontSize: 12, color: C.muted, textDecoration: "none", marginBottom: 14, lineHeight: 1.4 }}>📍 {detail.address}</a>
+                <a href={detail.mapsUrl} target="_blank" rel="noreferrer" style={{ display: "block", fontSize: 12.5, color: C.muted, textDecoration: "none", marginBottom: 14, lineHeight: 1.4 }}>{detail.address}</a>
               )}
 
               {hoursOpen && (
@@ -4639,9 +4637,9 @@ function PageInner() {
                 </div>
               )}
 
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+              <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 16 }}>
                 {experienceBadges(detail, null, 4).map((b) => (
-                  <button key={b.key} onClick={() => { setDetail(null); openExperience(b.key); }} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: C.accent, background: C.adim, border: `1px solid ${C.accent}`, borderRadius: 999, padding: "4px 11px", cursor: "pointer" }}>{b.icon} {b.label}</button>
+                  <button key={b.key} onClick={() => { setDetail(null); openExperience(b.key); }} style={{ fontSize: 12, fontWeight: 700, color: C.light, background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "5px 11px", cursor: "pointer" }}>{b.label}</button>
                 ))}
               </div>
 
