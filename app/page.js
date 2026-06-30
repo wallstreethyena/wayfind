@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v6.5";
+const BUILD = "v6.6";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -1515,6 +1515,28 @@ function wittyLine(p) {
   return pick([
     "Worth a closer look", "Might be your next regular", "One to keep on the list",
   ]);
+}
+// v6.6: a calm, specific, COMPLETE one-liner for a place card. No city names (so it
+// can never contradict the active search), no hype, always reflects open/closed,
+// kept short enough to fit one line without truncation. Lightly varied by place id.
+function calmReason(p) {
+  if (!p) return "";
+  const r = p.rating, n = p.reviews || 0, d = p.distMi, open = liveOpen(p);
+  let seed = 0; const s = String(p.id || p.name || "");
+  for (let i = 0; i < s.length; i++) seed = (seed * 31 + s.charCodeAt(i)) >>> 0;
+  const pick = (arr) => arr[seed % arr.length];
+  let lead;
+  if (r != null && r >= 4.6 && n >= 300) lead = pick(["Highly rated, thousands of reviews", "Top rated, loved by thousands"]);
+  else if (r != null && r >= 4.5 && n >= 100) lead = pick(["Highly rated with strong reviews", "Consistently rated, well reviewed"]);
+  else if (r != null && r >= 4.4 && n > 0 && n < 100) lead = pick(["A quiet, well rated find", "An under the radar favorite"]);
+  else if (r != null && r >= 4.2) lead = pick(["A solid, well rated pick", "A dependable nearby pick"]);
+  else if (n >= 1500) lead = pick(["A popular local spot", "A well known local spot"]);
+  else lead = pick(["Worth a closer look", "One to consider nearby"]);
+  if (open === true) return lead + ", open now";
+  if (open === false && p.nextOpen && p.nextOpen.today && p.nextOpen.label) return lead + ", " + p.nextOpen.label.replace(/^Opens/i, "opens");
+  if (open === false) return lead + ", closed now";
+  if (d != null && d > 10) return lead + ", worth the drive";
+  return lead;
 }
 function HookSolo({ h, place, liked, onOpen, onLike, onShare }) {
   if (!h) return null;
@@ -3656,9 +3678,19 @@ function PageInner() {
                     {picksHook && (
                       <HookSolo h={picksHook} place={picksTop ? { ...picksTop, distMi: null } : null} liked={hookLikes.has(picksHook.id)} onOpen={openHook} onLike={onHookHeart} onShare={() => shareHook(picksHook, picksTop)} />
                     )}
-                    {sectionHooks.map((h) => (
-                      <HookSolo key={"homehook-" + h.id} h={h} place={pmH[h.placeId]} liked={hookLikes.has(h.id)} onOpen={openHook} onLike={onHookHeart} onShare={shareHook} />
-                    ))}
+                    {/* v6.6: editorial cards lead with the place name + a calm, complete, location-safe reason and one CTA ("View place"). They never print a city in copy, so they cannot contradict the header. Photo-backed cards come first. */}
+                    {[...sectionHooks]
+                      .filter((h) => pmH[h.placeId])
+                      .sort((a, b) => ((pmH[b.placeId] && pmH[b.placeId].photo) ? 1 : 0) - ((pmH[a.placeId] && pmH[a.placeId].photo) ? 1 : 0))
+                      .map((h) => {
+                        const pl = pmH[h.placeId];
+                        const cat = primaryCategory(pl);
+                        const catEmoji = ({ Food: "🍽️", Nightlife: "🍸", Activities: "🎯", Shopping: "🛍️", Hotels: "🏨" })[cat] || h.emoji || "📍";
+                        const dh = { id: h.id, accent: h.accent || C.accent, emoji: catEmoji, label: cat || "Pick", hook: pl.name, subtitle: calmReason(pl), cta: "View place" };
+                        return (
+                          <HookSolo key={"homehook-" + h.id} h={dh} place={pl} liked={isSaved(pl.id)} onOpen={() => openDetail(pl)} onLike={() => quickSaveFavorite(pl)} onShare={() => shareHook(h, pl)} />
+                        );
+                      })}
                     {canRoll && (
                       <HookSolo h={diceHook} place={null} liked={false} onOpen={() => openSurprise()} />
                     )}
