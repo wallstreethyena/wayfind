@@ -23,26 +23,27 @@ export async function GET(req) {
     if (cat) metaBits.push(cat);
     if (loc) metaBits.push(loc);
     if (mi) metaBits.push(mi + " mi");
+    const scNum = parseFloat(sc);
+    const scWord = isNaN(scNum) ? "" : (scNum >= 9.5 ? "Exceptional" : scNum >= 9.0 ? "Excellent" : scNum >= 8.5 ? "Great" : scNum >= 8.0 ? "Very good" : scNum >= 7.0 ? "Good" : "Fair");
+    const scoreText = sc ? (scWord ? scWord + " \u00b7 " + sc + " / 10" : sc + " / 10") : (r ? "\u2605 " + r : "");
     return new ImageResponse(
       (
         <div style={{ width: "1200px", height: "630px", display: "flex", backgroundColor: BG, fontFamily: "sans-serif", position: "relative" }}>
-          <div style={{ position: "absolute", display: "flex", top: -60, right: -160, width: 820, height: 820, borderRadius: 820, backgroundImage: "radial-gradient(circle, rgba(249,115,22,0.26) 0%, rgba(249,115,22,0) 62%)" }} />
-          <div style={{ position: "absolute", display: "flex", top: 190, left: 905 }}>
-            <svg width="196" height="196" viewBox="0 0 24 24" fill={O}>
+          <div style={{ position: "absolute", display: "flex", top: -120, right: -200, width: 980, height: 980, borderRadius: 980, backgroundImage: "radial-gradient(circle, rgba(249,115,22,0.34) 0%, rgba(249,115,22,0) 60%)" }} />
+          <div style={{ position: "absolute", display: "flex", top: 168, left: 872 }}>
+            <svg width="270" height="270" viewBox="0 0 24 24" fill={O} style={{ filter: "drop-shadow(0 12px 40px rgba(249,115,22,0.55))" }}>
               <path fillRule="evenodd" clipRule="evenodd" d="M12 2C7.58 2 4 5.58 4 10c0 5.25 6.94 11.4 7.24 11.66a1.15 1.15 0 0 0 1.52 0C13.06 21.4 20 15.25 20 10c0-4.42-3.58-8-8-8Zm0 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z" />
             </svg>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 64px", width: 830, height: "100%" }}>
-            <div style={{ display: "flex", fontSize: 40, fontWeight: 800, color: "#FFFFFF", letterSpacing: -0.5, marginBottom: 6 }}>wayfind</div>
-            <div style={{ display: "flex", fontSize: 26, fontWeight: 700, color: O, marginBottom: 18 }}>Found a spot for you</div>
-            <div style={{ display: "flex", fontSize: 74, fontWeight: 800, color: "#F1F5F9", lineHeight: 1.03, letterSpacing: -2, maxWidth: 700, textShadow: "0 2px 30px rgba(0,0,0,0.4)" }}>{name}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 26 }}>
-              {sc ? (<div style={{ display: "flex", alignItems: "center", backgroundColor: O, color: BG, fontSize: 28, fontWeight: 800, padding: "8px 20px", borderRadius: 999 }}>{sc} / 10</div>) : (r ? (<div style={{ display: "flex", alignItems: "center", backgroundColor: O, color: BG, fontSize: 28, fontWeight: 800, padding: "8px 20px", borderRadius: 999 }}>★ {r}</div>) : (<div style={{ display: "flex" }} />))}
-              {(r && sc) ? (<div style={{ display: "flex", alignItems: "center", color: "#CBD5E1", fontSize: 26, fontWeight: 700 }}>★ {r}{rev ? " (" + rev + ")" : ""}</div>) : (<div style={{ display: "flex" }} />)}
-            </div>
-            <div style={{ display: "flex", fontSize: 28, fontWeight: 600, color: "#94A3B8", marginTop: 22 }}>{metaBits.length ? metaBits.join("  ·  ") : "A great nearby spot"}</div>
-            <div style={{ display: "flex", marginTop: 34 }}>
-              <div style={{ display: "flex", alignItems: "center", backgroundColor: O, color: BG, fontSize: 27, fontWeight: 800, padding: "15px 30px", borderRadius: 999, boxShadow: "0 8px 30px rgba(249,115,22,0.45)" }}>See it on Wayfind →</div>
+          <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 70px", width: 850, height: "100%" }}>
+            <div style={{ display: "flex", fontSize: 46, fontWeight: 800, color: "#FFFFFF", letterSpacing: -0.5, marginBottom: 10 }}>wayfind</div>
+            <div style={{ display: "flex", fontSize: 30, fontWeight: 700, color: O, marginBottom: 20 }}>Found a spot for you</div>
+            <div style={{ display: "flex", fontSize: 84, fontWeight: 800, color: "#FFFFFF", lineHeight: 1.02, letterSpacing: -2.5, maxWidth: 700, textShadow: "0 2px 30px rgba(0,0,0,0.4)" }}>{name}</div>
+            {scoreText ? (<div style={{ display: "flex", marginTop: 30 }}><div style={{ display: "flex", alignItems: "center", backgroundColor: O, color: BG, fontSize: 38, fontWeight: 800, padding: "12px 28px", borderRadius: 999 }}>{scoreText}</div></div>) : (<div style={{ display: "flex" }} />)}
+            {(r && sc) ? (<div style={{ display: "flex", alignItems: "center", color: "#E2E8F0", fontSize: 34, fontWeight: 700, marginTop: 18 }}>{"\u2605 " + r}{rev ? "  \u00b7  " + rev + " reviews" : ""}</div>) : (<div style={{ display: "flex" }} />)}
+            <div style={{ display: "flex", fontSize: 33, fontWeight: 600, color: "#CBD5E1", marginTop: 18 }}>{metaBits.length ? metaBits.join("  \u00b7  ") : "A great nearby spot"}</div>
+            <div style={{ display: "flex", marginTop: 38 }}>
+              <div style={{ display: "flex", alignItems: "center", backgroundColor: O, color: BG, fontSize: 32, fontWeight: 800, padding: "17px 34px", borderRadius: 999, boxShadow: "0 8px 30px rgba(249,115,22,0.45)" }}>See it on Wayfind →</div>
             </div>
           </div>
         </div>
