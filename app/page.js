@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v4.1";
+const BUILD = "v4.2";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -1130,7 +1130,7 @@ function renderHookText(text, highlightWord, color) {
 // visual style of premium discovery apps.
 function HooksBanner({ hooks, likedIds, totalLiked, onOpen, onLike, allPlaces, isDesktop }) {
   if (!hooks || hooks.length === 0) return null;
-  const shown = hooks.slice(0, 1); // global rule: at most one hook card, never a stacked grid
+  const shown = hooks.slice(0, 5); // show the spread of hooks, stacked full-width on mobile
   const liked = likedIds || new Set();
   // Build a place lookup so each tile can show its place's real photo
   const placeMap = {};
@@ -3191,6 +3191,8 @@ function PageInner() {
           const heroPick = heroOrder.length ? heroOrder[heroNonce % heroOrder.length] : null;
           const heroSl = heroPick ? scoreLabel(heroPick.wfScore) : null;
           const heroHook = heroPick ? hookCards.find((hk) => hk && hk.placeId === heroPick.id) : null;
+          const sectionHooks = hookCards.filter((hk) => hk && (!heroHook || hk.id !== heroHook.id)).slice(0, 5);
+          const sectionHookIds = new Set(sectionHooks.map((hk) => hk.id));
           const heroReason = heroPick ? ((heroHook && heroHook.hook) ? heroHook.hook : (blurbs[heroPick.id] || "")) : "";
           const heroIsGem = !!(heroPick && heroGem && heroPick.id === heroGem.id && (!heroTop || heroGem.id !== heroTop.id));
           // Honest hero badge: only say "start here" when the place is genuinely open now.
@@ -3303,6 +3305,19 @@ function PageInner() {
                   </div>
                 </div>
               )}
+              {/* v4.2: editorial hook cards restored full-width, variety of angles, stacked, never a squared grid */}
+              {sectionHooks.length > 0 && (() => {
+                const pmH = {};
+                [...(suggested || []), ...places].filter(Boolean).forEach((pp) => { if (pp && pp.id) pmH[pp.id] = pp; });
+                return (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: C.text, marginBottom: 10 }}>Worth a look near {locName ? locName.split(",")[0] : "you"}</div>
+                    {sectionHooks.map((h) => (
+                      <HookSolo key={"homehook-" + h.id} h={h} place={pmH[h.placeId]} liked={hookLikes.has(h.id)} onOpen={openHook} onLike={onHookHeart} />
+                    ))}
+                  </div>
+                );
+              })()}
               {/* v3.7: mobile inline "You are exploring" card removed — it duplicated the 📍 This area tile sheet. Data is unchanged; it now loads only when the tile is opened. */}
               {/* v4.1: standalone "Happening at the library" card removed from home — this content now lives in the Community tile sheet (menuSheet === "community"). libraryEvents state and fetch are unchanged. */}
               {!isDesktop && foryouEvents && foryouEvents.length > 0 && (
@@ -3372,10 +3387,7 @@ function PageInner() {
               {!suggestedLoading && suggested !== null && (() => {
                 const rest = homeFeed.slice(4);
                 // v3.7: keep the two banner hooks out of the inline weave so nothing repeats.
-                const _t5 = hookCards.find((h) => h.id === "top5");
-                const _oth = hookCards.filter((h) => h.id !== "top5");
-                const _bannerIds = new Set((_t5 ? [_t5, ..._oth] : _oth).slice(0, 2).map((h) => h.id));
-                const inlineHooks = hookCards.filter((h) => !_bannerIds.has(h.id));
+                const inlineHooks = hookCards.filter((h) => h && !sectionHookIds.has(h.id) && (!heroHook || h.id !== heroHook.id));
                 const pm = {};
                 [...(suggested || []), ...places].filter(Boolean).forEach((pp) => { if (pp && pp.id) pm[pp.id] = pp; });
                 const out = [];
