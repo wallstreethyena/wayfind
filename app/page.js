@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v6.0";
+const BUILD = "v6.2";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -1216,12 +1216,15 @@ function generateHooks(places, locName) {
     cta: "See both →", action: { type: "detail", place: foodTop },
   });
 
-  // Top 5 summary — entry point to the ranked list
+  // Wayfind Top 5 — the flagship branded entry into the curated picks sheet.
   if (byScore.length >= 5) hooks.push({
-    id: "top5", accent: "#FBBF24", emoji: "🏆", label: `Top 5 in ${city}`,
-    hook: `Top 5 spots within 20 minutes of you`,
+    id: "top5", accent: "#F97316", emoji: "🧭", label: `Wayfind Top 5 · ${city}`, highlightWord: "top 5",
+    hook: `Wayfind's top 5 picks in ${city} right now`,
     detail: byScore.slice(0, 3).map((p) => p.name).join("  ·  "),
-    cta: "See all →", action: { type: "explore" },
+    theme: "best", placeId: byScore[0].id,
+    themeTitle: `Wayfind Top 5 in ${city}`,
+    themeBody: `The five highest-scoring spots near you right now, ranked by the Wayfind Score, which weights each rating by how many people stand behind it. No ads, no paid placement, just what consistently earns it.`,
+    cta: "See the 5 →", action: { type: "explore" },
   });
 
   // Late night bonus
