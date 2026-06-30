@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v3.5";
+const BUILD = "v3.6";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -253,6 +253,49 @@ function setCachedInsight(id, data) {
 }
 
 // Turn the 0 to 100 score into a 9.0 style number plus a plain-language tier.
+// Global dedupe: one shared layer every feed runs before rendering, so the same
+// place never shows twice and two branches of one brand (e.g. Oak & Stone) never
+// sit back to back in a curated feed. Exact place_id duplicates always collapse.
+// When collapseBrand is true (general recommendation feeds) same-name brands
+// collapse to their single best branch; brand searches pass false and keep all.
+function normName(s) {
+  let t = String(s || "").toLowerCase();
+  const cut = t.search(/\s[-\u2013\u2014|]\s/);
+  if (cut > 0) t = t.slice(0, cut);
+  return t.replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+function betterPlace(a, b) {
+  if (!a) return b; if (!b) return a;
+  const oa = a.openNow === true ? 1 : 0, ob = b.openNow === true ? 1 : 0;
+  if (oa !== ob) return oa > ob ? a : b;
+  const na = a.reviews || 0, nb = b.reviews || 0;
+  if (na !== nb) return na > nb ? a : b;
+  const ra = a.rating || 0, rb = b.rating || 0;
+  if (ra !== rb) return ra > rb ? a : b;
+  const pa = a.photo ? 1 : 0, pb = b.photo ? 1 : 0;
+  if (pa !== pb) return pa > pb ? a : b;
+  return (a.wfScore || 0) >= (b.wfScore || 0) ? a : b;
+}
+function dedupePlaces(list, collapseBrand) {
+  if (!Array.isArray(list)) return [];
+  const out = []; const at = new Map();
+  for (const p of list) {
+    if (!p) continue;
+    const id = p.id || p.placeId || ("n:" + p.name + "|" + (p.address || ""));
+    if (at.has(id)) { const i = at.get(id); out[i] = betterPlace(out[i], p); }
+    else { at.set(id, out.length); out.push(p); }
+  }
+  if (!collapseBrand) return out;
+  const out2 = []; const nat = new Map();
+  for (const p of out) {
+    const k = normName(p.name);
+    if (!k) { out2.push(p); continue; }
+    if (nat.has(k)) { const i = nat.get(k); out2[i] = betterPlace(out2[i], p); }
+    else { nat.set(k, out2.length); out2.push(p); }
+  }
+  return out2;
+}
+
 function scoreLabel(wf) {
   if (wf == null) return null;
   const s = (wf / 10).toFixed(1);
@@ -2718,7 +2761,7 @@ function PageInner() {
   const viewBase = sortBy === "near"
     ? [...places].filter((p) => sliderMi >= 30 || p.distMi == null || p.distMi <= sliderMi).sort((a, b) => (a.distMi ?? 1e12) - (b.distMi ?? 1e12))
     : [...places].sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0));
-  const view = dealsOnly ? viewBase.filter((p) => offers[p.id]) : viewBase;
+  const view = dedupePlaces(dealsOnly ? viewBase.filter((p) => offers[p.id]) : viewBase, !searchMode);
   // Explore now opens on a single standout, just like the home screen. Prefer a
   // place you can actually go to now; the rest of the ranked list follows below.
   const exHero = (!loading && view.length > 0) ? (view.find((p) => liveOpen(p) === true) || view[0]) : null;
@@ -3050,7 +3093,7 @@ function PageInner() {
           const affinities = computeAffinities(signals);
           const activeSignals = signals.filter((s) => s.action === "like" || s.action === "dislike");
           const hasAffinity = activeSignals.length >= 2;
-          const displayList = hasAffinity ? applyAffinity(list, affinities) : list;
+          const displayList = dedupePlaces(hasAffinity ? applyAffinity(list, affinities) : list, true);
           const likeCount = Object.keys(liked).length;
           const h = new Date().getHours();
           const part = h < 11 ? "this morning" : h < 15 ? "for lunch" : h < 17 ? "this afternoon" : h < 22 ? "tonight" : "right now";
@@ -3231,7 +3274,7 @@ function PageInner() {
               )}
               {!suggestedLoading && suggested !== null && list.length > 0 && (
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10 }}>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: C.text }}>Your picks</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: C.text }}>Wayfind Picks</div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <button onClick={() => setSortBy("best")} style={{ padding: "6px 13px", borderRadius: 999, border: `1.5px solid ${sortBy === "best" ? C.accent : C.border}`, background: sortBy === "best" ? C.accent : "transparent", color: sortBy === "best" ? "#0D1117" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>⭐ Best</button>
                     <button onClick={() => { if (sortBy !== "near") { setSortBy("near"); setSliderMi(Math.min(30, Math.max(1, Math.round(searchRadius / 1609.34)))); setRadiusOpen(true); } else { setRadiusOpen((o) => !o); } }} style={{ padding: "6px 13px", borderRadius: 999, border: `1.5px solid ${sortBy === "near" ? C.accent : C.border}`, background: sortBy === "near" ? C.accent : "transparent", color: sortBy === "near" ? "#0D1117" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>📍 Closest</button>{Object.keys(offers).length > 0 && <button onClick={() => setDealsOnly((d) => !d)} style={{ marginLeft: 8, padding: "6px 13px", borderRadius: 999, border: `1.5px solid ${dealsOnly ? C.accent : C.border}`, background: dealsOnly ? C.accent : "transparent", color: dealsOnly ? "#0D1117" : C.light, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>🏷️ Deals</button>}
@@ -4262,13 +4305,7 @@ function PageInner() {
         // Merge the two source lists, but de-dupe by id — a place that appears
         // in both the suggested feed and the nearby search would otherwise show
         // up twice in a themed list.
-        const allSrc = (() => {
-          const seen = new Set(); const out = [];
-          [...(suggested || []), ...places].filter(Boolean).forEach((p) => {
-            if (p && p.id && !seen.has(p.id)) { seen.add(p.id); out.push(p); }
-          });
-          return out;
-        })();
+        const allSrc = dedupePlaces([...(suggested || []), ...places], true);
         const acc = hookDetail.accent || C.accent;
         const theme = hookDetail.theme || "best";
         const isLiked = hookLikes.has(hookDetail.id);
