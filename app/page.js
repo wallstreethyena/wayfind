@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v3.4";
+const BUILD = "v3.5";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -3967,9 +3967,15 @@ function PageInner() {
                   {(() => { const sl = scoreLabel(detail.wfScore); return sl ? <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4 }}><span style={{ fontSize: 22, fontWeight: 900, color: C.accent, lineHeight: 1 }}>{sl.s}</span><span style={{ fontSize: 11, color: C.muted, fontWeight: 700 }}>/ 10</span></span> : null; })()}
                 </div>
                 <div style={{ fontSize: 13, color: C.text, lineHeight: 1.5, marginTop: 7 }}>{(() => {
-                  const lead = detail.rating != null && detail.rating >= 4.5 ? "A local favorite" : detail.rating != null && detail.rating >= 4 ? "A well-rated spot" : "A solid pick nearby";
-                  const rev = detail.reviews >= 1000 ? " with thousands of reviews" : detail.reviews >= 200 ? " with plenty of reviews" : "";
-                  const dist = detail.distMi == null ? "." : detail.distMi <= 5 ? ", and close by." : detail.distMi <= 20 ? ", an easy drive from you." : ", worth the trip.";
+                  const r = detail.rating, n = detail.reviews, d = detail.distMi;
+                  const lead = r != null && r >= 4.5 ? "A local favorite" : r != null && r >= 4 ? "A well-rated spot" : "A solid pick";
+                  const strong = r != null && r >= 4.3;
+                  const rev = n ? " with " + n.toLocaleString() + " reviews" : "";
+                  const dist = d == null ? "."
+                    : d <= 5 ? ", and it's close by."
+                    : d <= 12 ? ", a short " + Math.round(d) + " mile drive."
+                    : d <= 25 ? (strong ? ", " + Math.round(d) + " miles out but worth the drive." : ", though it's " + Math.round(d) + " miles out.")
+                    : (strong ? ", a " + Math.round(d) + " mile haul but a strong pick." : ", a long " + Math.round(d) + " miles away.");
                   return lead + rev + dist;
                 })()}</div>
                 <button onClick={() => setWhyOpen((o) => !o)} style={{ marginTop: 9, background: "transparent", border: `1px solid ${C.accent}`, color: C.accent, fontSize: 12, fontWeight: 800, borderRadius: 999, padding: "4px 12px", cursor: "pointer" }}>{whyOpen ? "Hide ▴" : "Why? ▾"}</button>
@@ -3987,10 +3993,10 @@ function PageInner() {
               </div>
 
               {/* 3. Insider tip */}
-              <div style={{ marginBottom: 16, background: C.adim, border: `1px solid ${C.accent}`, borderLeft: `4px solid ${C.accent}`, borderRadius: 14, padding: "13px 14px" }}>
+              <div style={{ marginBottom: 16, background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: "13px 14px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
                   <span style={{ fontSize: 16 }}>💡</span>
-                  <span style={{ fontSize: 14.5, fontWeight: 800, color: C.accent }}>Insider tip</span>
+                  <span style={{ fontSize: 14.5, fontWeight: 800, color: C.light }}>Insider tip</span>
                 </div>
                 {(() => {
                   const th = todayHours(detailExtra);
@@ -4015,17 +4021,13 @@ function PageInner() {
                     Reading the reviews for the best tip
                   </div>
                 )}
-                {!insightLoading && insight && insight.unavailable && <div style={{ fontSize: 13, color: C.muted }}>The details above are live. AI tips are not turned on yet.</div>}
-                {!insightLoading && insight && insight.error && (
-                  <div style={{ fontSize: 13, color: C.muted }}>The live details above are the key things to know here.</div>
-                )}
                 {!insightLoading && insight && !insight.unavailable && !insight.error && (() => {
                   const ins = insight || {};
                   const tip = ins.tip || (Array.isArray(ins.tips) && ins.tips[0]) || ins.mustTry || "";
                   const bestTime = ins.bestTime && String(ins.bestTime).trim() ? ins.bestTime : "";
                   const caution = ins.caution || (Array.isArray(ins.cautions) && ins.cautions[0]) || "";
                   const hasTip = tip && String(tip).trim();
-                  if (!hasTip && !bestTime && !caution) return <div style={{ fontSize: 13, color: C.muted }}>The live details above are the key things to know here.</div>;
+                  if (!hasTip && !bestTime && !caution) return null;
                   return (
                     <div>
                       {hasTip && <div style={{ fontSize: 14.5, color: C.text, lineHeight: 1.5, fontWeight: 600, marginBottom: bestTime || caution ? 10 : 0 }}>{tip}</div>}
@@ -4035,7 +4037,7 @@ function PageInner() {
                   );
                 })()}
               <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
-                <button onClick={() => { const n = !showMore; setShowMore(n); if (n) { loadFullInsight(detail, detailExtra); loadVideos(detail); } }} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer", fontSize: 14, fontWeight: 800, color: C.accent, background: C.adim, border: `1px solid ${C.accent}`, borderRadius: 12, padding: "12px 14px" }}>
+                <button onClick={() => { const n = !showMore; setShowMore(n); if (n) { loadFullInsight(detail, detailExtra); loadVideos(detail); } }} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer", fontSize: 14, fontWeight: 800, color: C.light, background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px" }}>
                   <span>{showMore ? "Show less" : "✨ Tips, videos & more"}</span>
                   <span style={{ fontSize: 12, fontWeight: 800 }}>{showMore ? "▴" : "▾"}</span>
                 </button>
