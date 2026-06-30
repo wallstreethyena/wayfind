@@ -10,6 +10,7 @@ export async function GET(req) {
   const title = (searchParams.get("t") || "Find great places near you").slice(0, 90);
   const loc = (searchParams.get("loc") || "").slice(0, 60);
   const n = (searchParams.get("n") || "").replace(/[^0-9]/g, "").slice(0, 3);
+  const sub = (searchParams.get("sub") || "").slice(0, 100);
 
   const O = "#F97316";
   const BG = "#0D1117";
@@ -37,10 +38,10 @@ export async function GET(req) {
               {loc ? (<div style={{ display: "flex", alignItems: "center", color: "#CBD5E1", fontSize: 27, fontWeight: 700 }}>{loc}</div>) : (<div style={{ display: "flex" }} />)}
             </div>
           ) : (<div style={{ display: "flex" }} />)}
-          <div style={{ display: "flex", fontSize: 27, fontWeight: 500, color: "#94A3B8", marginTop: 20 }}>Hand-picked spots near you, ranked best first.</div>
+          <div style={{ display: "flex", fontSize: 27, fontWeight: 500, color: "#94A3B8", marginTop: 20 }}>{sub ? ("Featuring " + sub) : "Hand-picked spots near you, ranked best first."}</div>
           <div style={{ display: "flex", fontSize: 22, fontWeight: 600, color: "#64748B", marginTop: 12 }}>Food · Nightlife · Beaches · Things to do · Stays</div>
           <div style={{ display: "flex", marginTop: 30 }}>
-            <div style={{ display: "flex", alignItems: "center", backgroundColor: O, color: BG, fontSize: 28, fontWeight: 800, padding: "15px 30px", borderRadius: 999, boxShadow: "0 8px 30px rgba(249,115,22,0.45)" }}>Tap to explore →</div>
+            <div style={{ display: "flex", alignItems: "center", backgroundColor: O, color: BG, fontSize: 28, fontWeight: 800, padding: "15px 30px", borderRadius: 999, boxShadow: "0 8px 30px rgba(249,115,22,0.45)" }}>Help me wayfind it →</div>
           </div>
         </div>
       </div>

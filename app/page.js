@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v4.4";
+const BUILD = "v4.5";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -2899,7 +2899,9 @@ function PageInner() {
   async function buildListShareUrl(places, title) {
     const payload = encodeList(places);
     const n = (places || []).length;
-    const q = `t=${encodeURIComponent(title || "")}&loc=${encodeURIComponent(locName || "")}&n=${n}`;
+    const names = (places || []).map((p) => p && p.name).filter(Boolean);
+    const sub = names.slice(0, 2).join(", ") + (names.length > 2 ? " and " + (names.length - 2) + " more" : "");
+    const q = `t=${encodeURIComponent(title || "")}&loc=${encodeURIComponent(locName || "")}&n=${n}&sub=${encodeURIComponent(sub)}`;
     if (supabase && payload) {
       try {
         const code = randCode();
@@ -2907,13 +2909,14 @@ function PageInner() {
         if (!error) return originUrl(`/s/${code}?${q}`);
       } catch {}
     }
+    if (payload) return originUrl(`/s/${payload}?${q}`);
     return originUrl("/");
   }
   async function shareList(places, title) {
     if (!places || !places.length) return;
     logEvent("share", null, { kind: "list", n: places.length, title: title || "" });
     const url = await buildListShareUrl(places, title);
-    shareLink(`Wayfind list: ${title}`, url, () => showToast("Link copied"), "A few places I think we should check out. Found them on Wayfind");
+    shareLink(`Wayfind list: ${title}`, url, () => showToast("Link copied"), `${title}. Help me wayfind it`);
   }
 
   if (keyMissing) {
@@ -4688,7 +4691,7 @@ function PageInner() {
                     {isLiked ? "❤️ Saved" : "🤍 Save this list"}
                   </button>
                   <button
-                    onClick={async () => { const ttl = hookDetail.themeTitle || hookDetail.hook || "My Wayfind picks"; const url = await buildListShareUrl(themePlaces, ttl); shareLink(ttl, url, () => showToast("Link copied"), `${ttl} — my picks on Wayfind`); }}
+                    onClick={async () => { const ttl = hookDetail.themeTitle || hookDetail.hook || "My Wayfind picks"; const url = await buildListShareUrl(themePlaces, ttl); shareLink(ttl, url, () => showToast("Link copied"), `${ttl} — help me wayfind it`); }}
                     style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px 0", borderRadius: 14, border: "none", background: acc, color: "#0D1117", fontSize: 14, fontWeight: 800, cursor: "pointer" }}
                   >
                     ↗ Share

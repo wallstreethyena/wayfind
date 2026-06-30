@@ -32,7 +32,9 @@ export async function generateMetadata({ searchParams }) {
     (n ? `${n} curated spots` : "Curated spots") +
     (loc ? ` in ${loc}` : "") +
     " · Tap to explore on Wayfind";
-  const og = "/share-card.png?v=5";
+  const sub = s(searchParams.sub);
+  let og = "/api/og?t=" + encodeURIComponent(t) + "&loc=" + encodeURIComponent(loc) + "&n=" + encodeURIComponent(n);
+  if (sub) og += "&sub=" + encodeURIComponent(sub);
   return {
     metadataBase: new URL(SITE),
     title: `${t} · Wayfind`,
