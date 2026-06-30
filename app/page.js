@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v2.7";
+const BUILD = "v2.8";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -3021,12 +3021,6 @@ function PageInner() {
                 </button>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "0 2px 9px" }}>
                   <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.7, textTransform: "uppercase", color: C.muted }}>Discover {locName ? locName.split(",")[0] : "your area"}</div>
-                  {weather && (
-                    <button onClick={() => setMenuSheet("weather")} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: "3px 10px 3px 6px", cursor: "pointer" }}>
-                      <img src={"/wx/" + (weather.img || "cloudy") + ".png"} alt="" style={{ height: 18, width: "auto", display: "block" }} />
-                      <span style={{ fontSize: 12, fontWeight: 800, color: C.text }}>{weather.temp}°</span>
-                    </button>
-                  )}
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
                   {[{ icon: "🎁", label: "Surprise", go: openSurprise }, { icon: "📍", label: "Nearby", go: () => setMenuSheet("explore") }, { icon: "✨", label: "Occasions", go: () => setMenuSheet("experiences") }, { icon: "📅", label: "Events", go: () => setMenuSheet("community") }].map((t) => (
@@ -3036,6 +3030,20 @@ function PageInner() {
                     </button>
                   ))}
                 </div>
+                {weather && (
+                  <button onClick={() => setMenuSheet("weather")} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, background: `linear-gradient(120deg, ${C.blue}1F 0%, ${C.card} 58%)`, border: `1px solid ${C.border}`, borderRadius: 14, padding: "10px 14px", marginTop: 10, cursor: "pointer", textAlign: "left" }}>
+                    <img src={"/wx/" + (weather.img || "cloudy") + ".png"} alt="" style={{ height: 42, width: "auto", flexShrink: 0, display: "block" }} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: C.text, lineHeight: 1 }}>{weather.temp}°</div>
+                      <div style={{ fontSize: 11.5, color: C.muted, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{weather.label || ""}{weather.hi != null && weather.lo != null ? ` · H ${weather.hi}° L ${weather.lo}°` : ""}</div>
+                    </div>
+                    <div style={{ marginLeft: "auto", display: "flex", gap: 14, alignItems: "center", flexShrink: 0 }}>
+                      {weather.feels != null && (<div style={{ textAlign: "center" }}><div style={{ fontSize: 9.5, color: C.muted, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.4px" }}>Feels</div><div style={{ fontSize: 14.5, fontWeight: 800, color: C.text, marginTop: 1 }}>{weather.feels}°</div></div>)}
+                      {weather.rain != null && (<div style={{ textAlign: "center" }}><div style={{ fontSize: 9.5, color: C.muted, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.4px" }}>Rain</div><div style={{ fontSize: 14.5, fontWeight: 800, color: weather.rain >= 50 ? C.blue : C.text, marginTop: 1 }}>{weather.rain}%</div></div>)}
+                      <span style={{ color: C.muted, fontSize: 18 }}>›</span>
+                    </div>
+                  </button>
+                )}
               </div>
               {!suggestedLoading && suggested !== null && heroPick && (
                 <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.7, textTransform: "uppercase", color: C.accent, margin: "2px 2px 8px" }}>Your next move</div>
