@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v6.6";
+const BUILD = "v6.8";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -424,6 +424,9 @@ const EXPERIENCES = {
   mexican:   { icon: "🌮", label: "Mexican",         title: "Mexican",          cat: "food",      keyword: "mexican", lead: "Tacos, salsa, and everything around them." },
   italian:   { icon: "🍝", label: "Italian",         title: "Italian",          cat: "food",      keyword: "italian", lead: "Pasta, red sauce, and a little romance." },
   dessert:   { icon: "🍰", label: "Bakery & sweets", title: "Bakery & Sweets",  cat: "food",      keyword: "bakery dessert", lead: "Warm bread, pastries, cakes, and the good stuff." },
+  museum:    { icon: "🏛️", label: "Museum",          title: "Museums & Galleries", cat: "attractions", keyword: "museum gallery", lead: "Indoor culture worth setting time aside for." },
+  nature:    { icon: "🌿", label: "Nature & trails",  title: "Nature & Trails",  cat: "attractions", keyword: "nature preserve park trails", lead: "Open air, trails, and room to breathe." },
+  entertainment: { icon: "🎢", label: "Entertainment", title: "Entertainment",  cat: "attractions", keyword: "things to do fun", lead: "Built for a fun day out." },
 };
 
 // Run a place through the FULL badge engine, not just the badge a user tapped.
@@ -458,6 +461,11 @@ function experienceBadges(p, selectedKey, max) {
   const ts = (p.types || []).join(" ").toLowerCase();
   if (["zoo", "aquarium", "amusement_park", "water_park", "theme_park"].some((x) => ts.includes(x))) q.add("family");
   if (["zoo", "aquarium", "amusement_park", "water_park", "theme_park", "national_park", "state_park", "botanical_garden", "campground", "beach"].some((x) => ts.includes(x))) q.add("outdoor");
+  // v6.8: type-true tags so museums, preserves, landmarks and scenic spots stop defaulting to "local favorite".
+  if (["museum", "art_gallery"].some((x) => ts.includes(x)) || said(["museum", "gallery"])) q.add("museum");
+  if (["national_park", "state_park", "natural_feature", "botanical_garden", "campground", "hiking", "_park"].some((x) => ts.includes(x)) || said(["preserve", "nature trail", "trailhead"])) q.add("nature");
+  if (["amusement_park", "theme_park", "water_park", "bowling_alley", "movie_theater", "aquarium", "zoo"].some((x) => ts.includes(x))) q.add("entertainment");
+  if (said(["skyway", "overlook", "lookout", "lighthouse", "observation deck"]) || ts.includes("natural_feature")) q.add("instagram");
 
   // Live music and family: real attribute flags OR the text clearly says so.
   if (L.includes("Live music") || said(["live music", "live band", "live bands"])) q.add("livemusic");
@@ -480,7 +488,7 @@ function experienceBadges(p, selectedKey, max) {
   const typeMap = [["pizza", "pizza"], ["sushi", "sushi"], ["steak", "steak"], ["seafood", "seafood"], ["hamburger", "burgers"], ["burger", "burgers"], ["mexican", "mexican"], ["taco", "mexican"], ["italian", "italian"], ["bakery", "dessert"], ["ice cream", "dessert"], ["ice_cream", "dessert"], ["dessert", "dessert"], ["donut", "dessert"], ["coffee", "coffee"], ["cafe", "coffee"], ["brewery", "beer"], ["brew_pub", "beer"], ["brewpub", "beer"]];
   for (const [needle, key] of typeMap) { if (tt.includes(needle)) q.add(key); }
 
-  const order = ["localfav", "gem", "value", "waterfront", "rooftop", "instagram", "romantic", "livemusic", "pizza", "sushi", "steak", "seafood", "burgers", "mexican", "italian", "dessert", "cocktails", "wine", "beer", "sports", "coffee", "breakfast", "outdoor", "family", "groups", "dog"];
+  const order = ["museum", "nature", "entertainment", "waterfront", "instagram", "rooftop", "romantic", "livemusic", "outdoor", "pizza", "sushi", "steak", "seafood", "burgers", "mexican", "italian", "dessert", "cocktails", "wine", "beer", "sports", "coffee", "breakfast", "family", "groups", "dog", "gem", "value", "localfav"];
   let keys = order.filter((k) => q.has(k) && EXPERIENCES[k]);
   if (selectedKey && EXPERIENCES[selectedKey]) {
     keys = keys.filter((k) => k !== selectedKey);
@@ -1538,13 +1546,87 @@ function calmReason(p) {
   if (d != null && d > 10) return lead + ", worth the drive";
   return lead;
 }
-function HookSolo({ h, place, liked, onOpen, onLike, onShare }) {
+// v6.8: read what KIND of place this is from its Google types and name. Used by the
+// reason engine so a museum, a preserve, a bridge and a restaurant each read differently.
+function placeKind(p) {
+  const ts = ((p.types || []).join(" ") + " " + (p.type || "")).toLowerCase();
+  const nm = (p.name || "").toLowerCase();
+  const has = (arr) => arr.some((k) => ts.includes(k));
+  const named = (arr) => arr.some((k) => nm.includes(k));
+  if (has(["museum", "art_gallery"]) || named(["museum", " gallery"])) return "museum";
+  if (has(["aquarium", "zoo"]) || named(["aquarium", "zoo"])) return "wildlife";
+  if (has(["amusement_park", "theme_park", "water_park", "bowling_alley", "movie_theater"]) || named(["arcade"])) return "entertainment";
+  if (named(["skyway", "overlook", "lookout", "lighthouse", "observation"])) return "scenic";
+  if (has(["beach"])) return "beach";
+  if (has(["national_park", "state_park", "_park", "natural_feature", "botanical_garden", "campground"]) || named(["preserve", "trailhead"])) return "nature";
+  if (has(["historical_landmark", "historical"]) || named(["memorial", "fort ", "historic "])) return "landmark";
+  if (named(["waterfront", "riverfront", "river roo", "bayfront", "marina", "riverwalk", "on the river", "on the bay", " pier", " wharf"])) return "waterfront";
+  if (has(["night_club", "bar", "pub", "brewery"])) return "bar";
+  if (has(["cafe", "coffee_shop", "bakery"]) || named(["coffee", "cafe", "espresso", "roasters"])) return "cafe";
+  if (has(["restaurant", "food", "meal_"])) return "restaurant";
+  if (has(["lodging", "hotel", "resort"])) return "hotel";
+  if (has(["store", "shopping_mall", "market"])) return "shopping";
+  return "generic";
+}
+// The global "why this pick" engine. Specific, varied and honest: it weighs the place
+// kind, its standing on the list (rank, and what it edges out the next pick on), and the
+// live context (weather, time of day). Deterministic per place so it never flickers.
+function pickReason(p, ctx) {
+  if (!p) return "";
+  ctx = ctx || {};
+  const w = ctx.weather, night = !!ctx.night, rank = ctx.rank || null, next = ctx.next || null, compact = !!ctx.compact;
+  const wet = !!(w && (w.wet || (w.rain != null && w.rain >= 50)));
+  const nice = !!(w && !wet && w.temp != null && w.temp >= 60 && w.temp <= 92);
+  const kind = placeKind(p);
+  let seed = 0; const s = String(p.id || p.name || "");
+  for (let i = 0; i < s.length; i++) seed = (seed * 31 + s.charCodeAt(i)) >>> 0;
+  const pick = (arr) => arr[seed % arr.length];
+  const indoor = ["museum", "wildlife", "cafe", "restaurant", "bar", "shopping", "hotel"].includes(kind);
+  const outdoor = ["nature", "beach", "scenic", "waterfront", "entertainment", "landmark"].includes(kind);
+  const bank = {
+    museum: ["a museum worth setting aside an hour or two", "indoor culture you can lose track of time in", "a proper museum, not a quick walk through"],
+    wildlife: ["a solid few hours, especially with kids", "an easy crowd pleaser, rain or shine"],
+    entertainment: ["built for a full day out", "the kind of place that rewards a little energy"],
+    scenic: ["a genuinely photo worthy stop", "worth it for the view alone", "the view here earns the photo"],
+    beach: ["sand and water when the weather plays along", "a proper beach day pick"],
+    nature: ["open air and trails, good for a reset", "green space worth the fresh air", "room to walk it off"],
+    landmark: ["a piece of local history worth the stop", "history you can actually walk through"],
+    waterfront: ["a table with the water in view", "hard to beat on the water near sunset"],
+    bar: ["an easy evening pour", "made for a night out"],
+    cafe: ["an easy coffee and a slow sit", "good for a laptop or a catch up"],
+    restaurant: ["a dependable table with strong marks", "the kind of spot people keep coming back to"],
+    hotel: ["a comfortable base near everything", "an easy place to land"],
+    shopping: ["worth a browse if you have the time", "good for a wander"],
+    generic: ["worth a closer look", "one to keep on the list"],
+  };
+  let line = pick(bank[kind] || bank.generic);
+  if (!compact) {
+    let clause = "";
+    // Comparative for the top of the list: why this one ranks where it does.
+    if (rank && rank <= 3 && next) {
+      const dr = (p.rating || 0) - (next.rating || 0), dn = (p.reviews || 0) - (next.reviews || 0);
+      if (rank === 1) clause = dn >= 200 ? "and the most reviews behind it on this list" : dr >= 0.1 ? "and the highest rating of the bunch" : "and the strongest overall score here";
+      else clause = dr >= 0.1 ? "rated a notch above the next pick" : dn >= 200 ? "with more reviews behind it than the next" : (p.distMi != null && next.distMi != null && p.distMi < next.distMi ? "and a little closer than the rest" : "");
+    }
+    // Weather and time change the decision, so they take priority over the ranking nuance when present.
+    if (indoor && wet) clause = "a smart call with rain around";
+    else if (outdoor && wet) clause = "though the weather is iffy today";
+    else if (!clause && outdoor && nice) clause = "and the weather is on your side";
+    else if (!clause && kind === "bar" && night) clause = "right on time for the evening";
+    if (clause) line += ", " + clause;
+  }
+  return line.charAt(0).toUpperCase() + line.slice(1);
+}
+function HookSolo({ h, place, liked, onOpen, onLike, onShare, collage }) {
   if (!h) return null;
   const acc = h.accent || C.accent;
   const photo = place && place.photo;
+  const tiles = (collage || []).filter(Boolean).slice(0, 4);
   return (
     <div onClick={() => onOpen && onOpen(h)} style={{ position: "relative", height: 200, borderRadius: 18, overflow: "hidden", marginBottom: 14, cursor: "pointer", boxShadow: liked ? `0 0 0 2.5px ${acc}, 0 8px 28px rgba(0,0,0,.5)` : "0 4px 20px rgba(0,0,0,.4)" }}>
-      {photo
+      {tiles.length >= 2
+        ? <div style={{ position: "absolute", inset: 0, display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr", gap: 1.5 }}>{tiles.map((src, i) => <img key={i} src={src} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }} />)}</div>
+        : photo
         ? <img src={photo} alt="" draggable={false} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }} />
         : <div style={{ position: "absolute", inset: 0, background: `linear-gradient(135deg, ${acc}50 0%, #0D1117 100%)` }} />}
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,.18) 0%, rgba(0,0,0,.55) 45%, rgba(0,0,0,.88) 100%)" }} />
@@ -3346,7 +3428,7 @@ function PageInner() {
       )}
 
       {/* Body */}
-      <div ref={scrollRef} style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflowY: screen === "map" ? "hidden" : "auto", padding: screen === "map" ? 0 : "12px 12px 40px" }}>
+      <div ref={scrollRef} style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflowY: screen === "map" ? "hidden" : "auto", padding: screen === "map" ? 0 : "12px 12px calc(48px + env(safe-area-inset-bottom))" }}>
         <>
             {screen === "explore" && <div style={{ maxWidth: isDesktop ? 760 : undefined, margin: isDesktop ? "0 auto" : undefined }}>{exploreList}</div>}
             {screen === "map" && (() => {
@@ -3526,9 +3608,13 @@ function PageInner() {
           const heroUnknown = displayList.filter((p) => p && p.openNow == null);
           const heroBase = heroOpenNow.length ? heroOpenNow : (heroUnknown.length ? heroUnknown : displayList.filter(Boolean));
           const heroTop = heroBase.length ? heroBase[0] : null;
-          const heroGem = heroBase.length >= 3
-            ? (heroBase.slice(2, 8).reduce((b, p) => (!b || (p.rating || 0) > (b.rating || 0) ? p : b), null) || heroBase[2])
+          // A true hidden gem is high quality but LOW review volume. A place with
+          // thousands of reviews is not a gem, so bound by review count before labeling.
+          const heroGemTrue = heroBase.length >= 3
+            ? heroBase.slice(2, 8).filter((p) => p && (p.rating || 0) >= 4.5 && (p.reviews || 0) > 0 && (p.reviews || 0) < 800).reduce((b, p) => (!b || (p.rating || 0) > (b.rating || 0) ? p : b), null)
             : null;
+          // Fallback alternative for the rotation when there is no true gem: next strongest pick (not labeled a gem).
+          const heroGem = heroGemTrue || (heroBase.length >= 3 ? heroBase[2] : null);
           let heroOrder = (heroBucket % 2 === 0) ? [heroTop, heroGem] : [heroGem, heroTop];
           heroOrder = heroOrder.filter((p, i, a) => p && a.findIndex((x) => x && x.id === p.id) === i);
           const heroPick = heroOrder.length ? heroOrder[heroNonce % heroOrder.length] : null;
@@ -3553,7 +3639,7 @@ function PageInner() {
             };
           })();
           const heroReason = heroPick ? ((heroHook && heroHook.hook) ? heroHook.hook : (blurbs[heroPick.id] || "")) : "";
-          const heroIsGem = !!(heroPick && heroGem && heroPick.id === heroGem.id && (!heroTop || heroGem.id !== heroTop.id));
+          const heroIsGem = !!(heroPick && heroGemTrue && heroPick.id === heroGemTrue.id && (!heroTop || heroGemTrue.id !== heroTop.id));
           // Honest hero badge: only say "start here" when the place is genuinely open now.
           // If it opens later today, set that expectation instead of implying it is ready.
           // If status is unknown or it is closed, fall back to a neutral "top pick" label.
@@ -3658,7 +3744,7 @@ function PageInner() {
                   <div style={{ display: "flex", gap: 10, padding: "0 16px 16px" }}>
                     <button onClick={() => openDetail(heroPick)} style={{ flex: 2, background: C.accent, color: "#0D1117", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 800, padding: "13px 0", cursor: "pointer" }}>Take me there →</button>
                     {heroOrder.length > 1 && (
-                      <button onClick={() => setHeroNonce((n) => n + 1)} style={{ flex: 1, background: "transparent", color: C.accent, border: `1.5px solid ${C.accent}`, borderRadius: 12, fontSize: 13.5, fontWeight: 800, padding: "13px 0", cursor: "pointer" }}>Another angle</button>
+                      <button onClick={() => setHeroNonce((n) => n + 1)} style={{ flex: 1, background: "transparent", color: C.light, border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 13.5, fontWeight: 800, padding: "13px 0", cursor: "pointer" }}>Show me another</button>
                     )}
                   </div>
                 </div>
@@ -3672,11 +3758,15 @@ function PageInner() {
                 const diceHook = { id: "dice-roll", accent: C.purple, emoji: "🎲", label: "Roll the Dice", hook: "Cannot decide where to go?", highlightWord: "decide", subtitle: "One strong spot near you, picked instantly", cta: "🎲 Roll for me →" };
                 const canRoll = !!(suggested && suggested.length > 0);
                 const shareHook = (hk, pl) => { if (!pl) return; logEvent("share", pl, { kind: "hook" }); addShared(pl); shareLink(pl.name, placeShareUrl(pl, locName), () => showToast("Link copied"), "Check out " + pl.name + " on Wayfind"); };
+                // Top 10 reads as a collection: a 4 photo collage from the highest scoring places, not one borrowed place photo.
+                const picksPhotos = [...displayList].filter((p) => p && p.photo).sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 4).map((p) => p.photo);
+                // No two cards on screen should share an image. Seed the used set with the hero photo and the collage photos.
+                const usedPhotos = new Set([heroPick && heroPick.photo, ...picksPhotos].filter(Boolean));
                 return (
                   <div style={{ marginBottom: 16 }}>
                     <div style={{ fontSize: 15, fontWeight: 800, color: C.text, marginBottom: 10 }}>Worth a look near {locName ? locName.split(",")[0] : "you"}</div>
                     {picksHook && (
-                      <HookSolo h={picksHook} place={picksTop ? { ...picksTop, distMi: null } : null} liked={hookLikes.has(picksHook.id)} onOpen={openHook} onLike={onHookHeart} onShare={() => shareHook(picksHook, picksTop)} />
+                      <HookSolo h={picksHook} collage={picksPhotos.length >= 2 ? picksPhotos : null} place={picksPhotos.length >= 2 ? null : (picksTop ? { ...picksTop, distMi: null } : null)} liked={hookLikes.has(picksHook.id)} onOpen={openHook} onLike={onHookHeart} onShare={() => shareHook(picksHook, picksTop)} />
                     )}
                     {/* v6.6: editorial cards lead with the place name + a calm, complete, location-safe reason and one CTA ("View place"). They never print a city in copy, so they cannot contradict the header. Photo-backed cards come first. */}
                     {[...sectionHooks]
@@ -3684,9 +3774,12 @@ function PageInner() {
                       .sort((a, b) => ((pmH[b.placeId] && pmH[b.placeId].photo) ? 1 : 0) - ((pmH[a.placeId] && pmH[a.placeId].photo) ? 1 : 0))
                       .map((h) => {
                         const pl = pmH[h.placeId];
+                        if (pl.photo && usedPhotos.has(pl.photo)) return null; // no repeated images across cards on screen
+                        if (pl.photo) usedPhotos.add(pl.photo);
                         const cat = primaryCategory(pl);
-                        const catEmoji = ({ Food: "🍽️", Nightlife: "🍸", Activities: "🎯", Shopping: "🛍️", Hotels: "🏨" })[cat] || h.emoji || "📍";
-                        const dh = { id: h.id, accent: h.accent || C.accent, emoji: catEmoji, label: cat || "Pick", hook: pl.name, subtitle: calmReason(pl), cta: "View place" };
+                        const tag = experienceBadges(pl, null, 1)[0];
+                        const catEmoji = (tag && tag.icon) || ({ Food: "🍽️", Nightlife: "🍸", Activities: "🎯", Shopping: "🛍️", Hotels: "🏨" })[cat] || h.emoji || "📍";
+                        const dh = { id: h.id, accent: h.accent || C.accent, emoji: catEmoji, label: (tag && tag.label) || cat || "Pick", hook: pl.name, subtitle: pickReason(pl, { weather, night: isNightNow(weather), compact: true }), cta: "View place" };
                         return (
                           <HookSolo key={"homehook-" + h.id} h={dh} place={pl} liked={isSaved(pl.id)} onOpen={() => openDetail(pl)} onLike={() => quickSaveFavorite(pl)} onShare={() => shareHook(h, pl)} />
                         );
@@ -4871,7 +4964,6 @@ function PageInner() {
                           {liveOpen(p) === true && <span style={{ fontSize: 11, fontWeight: 700, color: C.green }}>Open now</span>}
                           {liveOpen(p) === false && <span style={{ fontSize: 11, fontWeight: 700, color: C.red }}>Closed</span>}
                           {p.distMi != null && <span style={{ fontSize: 12, color: C.muted }}>· {p.distMi.toFixed(1)} mi</span>}
-                          {p.distMi != null && p.distMi > 10 && <span style={{ fontSize: 11, fontWeight: 800, color: C.gold }}>· worth the drive?</span>}
                           {p.price && <span style={{ fontSize: 12, color: C.green, fontWeight: 700 }}>{p.price}</span>}
                         </div>
                         {badges.length > 0 && (
@@ -4881,6 +4973,7 @@ function PageInner() {
                             ))}
                           </div>
                         )}
+                        {(() => { const why = pickReason(p, { rank: i + 1, total: themePlaces.length, next: themePlaces[i + 1], weather, night: isNightNow(weather) }); return why ? <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.4, marginBottom: isFeatured ? 8 : 2 }}>{why}</div> : null; })()}
                         {isFeatured && (
                           <div style={{ fontSize: 12.5, color: acc, fontWeight: 700 }}>See full details →</div>
                         )}
