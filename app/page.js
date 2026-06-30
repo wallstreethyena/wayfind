@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v5.7";
+const BUILD = "v5.8";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -1455,6 +1455,10 @@ function placesForHook(hook, allSrc) {
     const pri = allSrc.find((x) => x.id === primaryId);
     out = pri ? [pri, ...byScore.filter((p) => p.id !== pri.id).slice(0, 4)] : byScore.slice(0, 5);
   }
+  // v5.8: strictly nearest first within every hook list, so the closest spots lead.
+  // Places with no known distance fall to the end. The theme still chooses the set
+  // (Top 5 stays the top 5, gems stay gems); this only changes the order.
+  out = out.slice().sort((a, b) => ((a && a.distMi != null) ? a.distMi : Infinity) - ((b && b.distMi != null) ? b.distMi : Infinity));
   // v5.7 trust fix: the card headlines one specific place (hook.placeId). Always keep
   // that exact place at the front of the opened list, so tapping a card never lands on
   // a list that is missing the very spot it was recommending.
@@ -1588,7 +1592,7 @@ function PageInner() {
   const [cat, setCat] = useState("food");
   const [sub, setSub] = useState("all");
   const [vibe, setVibe] = useState("all");
-  const [sortBy, setSortBy] = useState("best");
+  const [sortBy, setSortBy] = useState("near");
   const [searchRadius, setSearchRadius] = useState(48280); // meters, ~30 miles default
   const [visibleCount, setVisibleCount] = useState(5); // explore list shows 5, then "Wayfind 5 more spots"
   const [radiusSheet, setRadiusSheet] = useState(false);
