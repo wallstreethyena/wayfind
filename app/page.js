@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v6.19";
+const BUILD = "v6.20";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -1493,6 +1493,13 @@ function placesForHook(hook, allSrc) {
     const night = allSrc.filter((p) => (primaryCategory(p) || "") === "Nightlife").sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 2);
     out = [...food, ...night];
   } else if (theme === "latenight") out = allSrc.filter((p) => p.openNow === true).sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 5);
+  else if (EXPERIENCES[theme]) {
+    const e = EXPERIENCES[theme];
+    const m = (p) => { if (e.filter) { try { return !!e.filter(p); } catch (er) { return false; } } try { return experienceBadges(p, null, 99).some((b) => b.key === theme); } catch (er) { return false; } };
+    out = allSrc.filter(m).sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 8);
+    const pri = allSrc.find((x) => x.id === primaryId);
+    if (pri && !out.find((p) => p.id === pri.id)) out = [pri, ...out].slice(0, 8);
+  }
   else {
     const pri = allSrc.find((x) => x.id === primaryId);
     out = pri ? [pri, ...byScore.filter((p) => p.id !== pri.id).slice(0, 4)] : byScore.slice(0, 5);
@@ -1729,6 +1736,33 @@ function decisionLine(p, ctx) {
   else if (kind === "landmark") use = ", worth a deliberate stop";
   return lead + use + ".";
 }
+// One distinct, engaging, place-specific headline per experience theme, so no
+// two hero cards ever read alike. Claims stay true: the rating is real and the
+// angle matches what the theme means. Returns a unique hook, subtitle, CTA, and
+// the word to highlight in the theme color.
+function themedHook(key, p) {
+  const n = (p && p.name) || "This spot";
+  const r = (p && p.rating != null) ? p.rating : null;
+  const rs = r != null ? r + "★" : "";
+  switch (key) {
+    case "localfav": return { hook: r != null ? n + " is a " + rs + " local favorite people keep coming back to." : n + " is a local favorite people keep coming back to.", sub: "A spot the neighborhood claims as its own", cta: "See local favorites →", hl: r != null ? rs : "favorite" };
+    case "gem": return { hook: r != null ? n + " is the " + rs + " gem most people walk right past." : n + " is the gem most people walk right past.", sub: "Quietly excellent, not yet crowded", cta: "See hidden gems →", hl: "gem" };
+    case "value": return { hook: r != null ? n + " is " + rs + " and still won't break the bank." : n + " won't break the bank.", sub: "Genuinely good, genuinely affordable", cta: "See great value →", hl: r != null ? rs : "bank" };
+    case "waterfront": return { hook: n + " puts you at a table with the water in view.", sub: "Worth it for the seat by the water", cta: "See waterfront spots →", hl: "water" };
+    case "livemusic": return { hook: n + " gives the night a live soundtrack.", sub: "Where the music plays", cta: "See live music →", hl: "live" };
+    case "family": return { hook: n + " keeps the kids happy and the grownups too.", sub: "Easy with the whole crew", cta: "See family spots →", hl: "kids" };
+    case "romantic": return { hook: n + " sets the table for date night.", sub: "Low light, good wine, a table for two", cta: "See date night spots →", hl: "date night" };
+    case "breakfast": return { hook: r != null ? n + " is the " + rs + " reason to wake up early." : n + " is the reason to wake up early.", sub: "Breakfast and brunch done right", cta: "See breakfast spots →", hl: r != null ? rs : "early" };
+    case "coffee": return { hook: r != null ? n + " pours a " + rs + " cup worth the stop." : n + " pours a cup worth the stop.", sub: "Where the morning starts", cta: "See cafes →", hl: r != null ? rs : "cup" };
+    case "instagram": return { hook: n + " is the shot worth stopping for.", sub: "Bring the camera", cta: "See photo spots →", hl: "shot" };
+    case "rooftop": return { hook: n + " takes the night up to the roof.", sub: "Drinks with a view from up top", cta: "See rooftop spots →", hl: "roof" };
+    case "outdoor": return { hook: n + " gives you a table in the open air.", sub: "Patios and courtyards worth sitting out for", cta: "See outdoor spots →", hl: "open air" };
+    case "beer": return { hook: n + " pours a proper cold one.", sub: "Cold taps and a good pour", cta: "See breweries →", hl: "cold" };
+    case "cocktails": return { hook: n + " makes a drink with real care.", sub: "Proper cocktails, made right", cta: "See cocktail bars →", hl: "drink" };
+    default: return { hook: r != null ? n + " is a " + rs + " spot worth your time." : n + " is worth your time.", sub: r != null ? rs + " and nearby" : "Worth a look", cta: "See the list →", hl: r != null ? rs : "" };
+  }
+}
+
 function HookSolo({ h, place, liked, onOpen, onLike, onShare, collage, hideLike, hideShare }) {
   if (!h) return null;
   const acc = h.accent || C.accent;
@@ -3916,9 +3950,10 @@ function PageInner() {
                     )}
                     {/* Each themed card = one experience, its own description, a real nearby place for the photo, and the curated list on tap. */}
                     {themeCards.map(({ key, place, e }) => {
-                      const dh = { id: "exp-" + key, accent: THEME_COLOR[key] || C.accent, emoji: e.icon, label: e.label, hook: e.title, subtitle: e.lead, cta: "See all →" };
+                      const t = themedHook(key, place);
+                      const dh = { id: "exp-" + key, accent: THEME_COLOR[key] || C.accent, emoji: e.icon, label: e.label, theme: key, placeId: place.id, highlightWord: t.hl, hook: t.hook, subtitle: t.sub, cta: t.cta, themeTitle: e.title, themeBody: e.lead };
                       return (
-                        <HookSolo key={"exp-" + key} h={dh} place={place} hideLike hideShare onOpen={() => openExperience(key)} />
+                        <HookSolo key={"exp-" + key} h={dh} place={place} hideLike hideShare onOpen={openHook} />
                       );
                     })}
                     {canRoll && (
@@ -5050,7 +5085,8 @@ function PageInner() {
                   onClick={() => { toggleHookLike(hookDetail.id); saveHookList(hookDetail, themePlaces); }}
                   style={{ display: "inline-flex", alignItems: "center", gap: 6, background: isLiked ? acc + "25" : "transparent", border: `1.5px solid ${isLiked ? acc : C.border}`, borderRadius: 999, padding: "6px 14px", color: isLiked ? acc : C.muted, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}
                 >
-                  {isLiked ? "❤️ Saved to lists" : "🤍 Save to lists"}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill={isLiked ? acc : "none"} stroke={isLiked ? acc : C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20 C12 20 4 14.6 4 9.2 C4 6.4 6.1 4.3 8.6 4.3 C10.3 4.3 11.5 5.4 12 6.5 C12.5 5.4 13.7 4.3 15.4 4.3 C17.9 4.3 20 6.4 20 9.2 C20 14.6 12 20 12 20 Z" /></svg>
+                  {isLiked ? "Saved to lists" : "Save to lists"}
                 </button>
               </div>
               <div style={{ fontSize: 10, fontWeight: 800, color: acc, textTransform: "uppercase", letterSpacing: "1px", marginBottom: 7 }}>{hookDetail.emoji} {hookDetail.label}</div>
