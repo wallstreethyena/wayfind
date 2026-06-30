@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v3.0";
+const BUILD = "v3.1";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -1359,6 +1359,10 @@ function PageInner() {
   const [signals, setSignals] = useState(() => { try { if (typeof window === "undefined") return []; return loadSignals(); } catch { return []; } });
   const [liked, setLiked] = useState(() => { try { return JSON.parse(localStorage.getItem("wf_liked") || "{}"); } catch { return {}; } });
   const [disliked, setDisliked] = useState(() => { try { return JSON.parse(localStorage.getItem("wf_disliked") || "{}"); } catch { return {}; } });
+  const [likedItems, setLikedItems] = useState(() => { try { return JSON.parse(localStorage.getItem("wf_liked_items") || "{}"); } catch { return {}; } });
+  const [dislikedItems, setDislikedItems] = useState(() => { try { return JSON.parse(localStorage.getItem("wf_disliked_items") || "{}"); } catch { return {}; } });
+  const [sharedItems, setSharedItems] = useState(() => { try { return JSON.parse(localStorage.getItem("wf_shared_items") || "{}"); } catch { return {}; } });
+  const [sysFolder, setSysFolder] = useState(null);
   const [signupOpen, setSignupOpen] = useState(false);
   const [signupEmail, setSignupEmail] = useState("");
   const [signupDone, setSignupDone] = useState(() => { try { return !!localStorage.getItem("wf_signed_up"); } catch { return false; } });
@@ -1458,6 +1462,12 @@ function PageInner() {
         if (!cancelled && dbLikes) {
           setLiked((prev) => { const next = { ...prev }; dbLikes.forEach((r) => { next[r.place_id] = true; }); return next; });
         }
+        const { data: likeRows } = await supabase.from("likes").select("place_id, place").eq("user_id", user.id);
+        if (!cancelled && likeRows) { let curL = {}; try { curL = JSON.parse(localStorage.getItem("wf_liked_items") || "{}"); } catch {} likeRows.forEach((r, i) => { if (r.place && r.place_id && !curL[r.place_id]) curL[r.place_id] = { place: r.place, ts: Date.now() - i }; }); try { localStorage.setItem("wf_liked_items", JSON.stringify(curL)); } catch {} setLikedItems(curL); }
+        const { data: disRows } = await supabase.from("saved_places").select("place").eq("user_id", user.id).eq("list_name", "Disliked");
+        if (!cancelled && disRows) { let curD = {}; try { curD = JSON.parse(localStorage.getItem("wf_disliked_items") || "{}"); } catch {} disRows.forEach((r, i) => { if (r.place && r.place.id && !curD[r.place.id]) curD[r.place.id] = { place: r.place, ts: Date.now() - i }; }); try { localStorage.setItem("wf_disliked_items", JSON.stringify(curD)); } catch {} setDislikedItems(curD); }
+        const { data: shrRows } = await supabase.from("saved_places").select("place").eq("user_id", user.id).eq("list_name", "Shared");
+        if (!cancelled && shrRows) { let curS = {}; try { curS = JSON.parse(localStorage.getItem("wf_shared_items") || "{}"); } catch {} shrRows.forEach((r, i) => { if (r.place && r.place.id && !curS[r.place.id]) curS[r.place.id] = { place: r.place, ts: Date.now() - i }; }); try { localStorage.setItem("wf_shared_items", JSON.stringify(curS)); } catch {} setSharedItems(curS); }
       } catch {}
     })();
     return () => { cancelled = true; };
@@ -1697,23 +1707,41 @@ function PageInner() {
       supabase.from("events").insert(row).then(() => {}, () => {});
     } catch (e) {}
   }
+  // Auto folders (Liked / Disliked / Shared). Saved on the server for signed-in users via saved_places reserved names; likes also use the existing likes table.
+  function svFolderUpsert(listName, p) {
+    if (supabase && user && p && p.id) supabase.from("saved_places").upsert({ user_id: user.id, place_id: p.id, place: p, list_name: listName }, { onConflict: "user_id,place_id,list_name" }).then(() => {}, () => {});
+  }
+  function svFolderDelete(listName, id) {
+    if (supabase && user && id) supabase.from("saved_places").delete().eq("user_id", user.id).eq("place_id", id).eq("list_name", listName).then(() => {}, () => {});
+  }
+  function addShared(p) {
+    if (!p || !p.id) return;
+    const next = { ...sharedItems, [p.id]: { place: p, ts: Date.now() } };
+    setSharedItems(next);
+    try { localStorage.setItem("wf_shared_items", JSON.stringify(next)); } catch {}
+    svFolderUpsert("Shared", p);
+  }
   function toggleLike(e, p) {
     e.stopPropagation();
     const wasLiked = !!liked[p.id];
     const nextLiked = { ...liked }; const nextDis = { ...disliked };
-    if (wasLiked) { delete nextLiked[p.id]; }
+    const nextLikedItems = { ...likedItems }; const nextDisItems = { ...dislikedItems };
+    if (wasLiked) { delete nextLiked[p.id]; delete nextLikedItems[p.id]; }
     else {
       nextLiked[p.id] = true; delete nextDis[p.id];
+      nextLikedItems[p.id] = { place: p, ts: Date.now() }; delete nextDisItems[p.id];
       recordSignal(p, "like");
       logEvent("like", p);
     }
     setLiked(nextLiked); setDisliked(nextDis);
-    try { localStorage.setItem("wf_liked", JSON.stringify(nextLiked)); localStorage.setItem("wf_disliked", JSON.stringify(nextDis)); } catch {}
+    setLikedItems(nextLikedItems); setDislikedItems(nextDisItems);
+    try { localStorage.setItem("wf_liked", JSON.stringify(nextLiked)); localStorage.setItem("wf_disliked", JSON.stringify(nextDis)); localStorage.setItem("wf_liked_items", JSON.stringify(nextLikedItems)); localStorage.setItem("wf_disliked_items", JSON.stringify(nextDisItems)); } catch {}
     if (supabase && user) {
       if (wasLiked) {
         supabase.from("likes").delete().eq("user_id", user.id).eq("place_id", p.id).then(() => {}, () => {});
       } else {
         supabase.from("likes").upsert({ user_id: user.id, place_id: p.id, place: p }, { onConflict: "user_id,place_id" }).then(() => {}, () => {});
+        svFolderDelete("Disliked", p.id);
       }
     }
   }
@@ -1721,10 +1749,18 @@ function PageInner() {
     e.stopPropagation();
     const wasDis = !!disliked[p.id];
     const nextLiked = { ...liked }; const nextDis = { ...disliked };
-    if (wasDis) { delete nextDis[p.id]; }
-    else { nextDis[p.id] = true; delete nextLiked[p.id]; recordSignal(p, "dislike"); logEvent("dislike", p); }
+    const nextLikedItems = { ...likedItems }; const nextDisItems = { ...dislikedItems };
+    if (wasDis) { delete nextDis[p.id]; delete nextDisItems[p.id]; svFolderDelete("Disliked", p.id); }
+    else {
+      nextDis[p.id] = true; delete nextLiked[p.id];
+      nextDisItems[p.id] = { place: p, ts: Date.now() }; delete nextLikedItems[p.id];
+      recordSignal(p, "dislike"); logEvent("dislike", p);
+      svFolderUpsert("Disliked", p);
+      if (supabase && user) supabase.from("likes").delete().eq("user_id", user.id).eq("place_id", p.id).then(() => {}, () => {});
+    }
     setLiked(nextLiked); setDisliked(nextDis);
-    try { localStorage.setItem("wf_liked", JSON.stringify(nextLiked)); localStorage.setItem("wf_disliked", JSON.stringify(nextDis)); } catch {}
+    setLikedItems(nextLikedItems); setDislikedItems(nextDisItems);
+    try { localStorage.setItem("wf_liked", JSON.stringify(nextLiked)); localStorage.setItem("wf_disliked", JSON.stringify(nextDis)); localStorage.setItem("wf_liked_items", JSON.stringify(nextLikedItems)); localStorage.setItem("wf_disliked_items", JSON.stringify(nextDisItems)); } catch {}
   }
   function toggleHookLike(hookId) {
     const next = new Set(hookLikes);
@@ -3410,10 +3446,10 @@ function PageInner() {
           );
         })()}
 
-        {screen === "saved" && !activeList && (
+        {screen === "saved" && !activeList && !sysFolder && (
           <div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, paddingTop: 4 }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>Your lists</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>Saved</div>
               <button onClick={() => setNewListOpen(true)} style={{ background: C.adim, border: `1px solid ${C.accent}`, color: C.accent, fontSize: 13, fontWeight: 700, padding: "7px 14px", borderRadius: 20, cursor: "pointer" }}>+ New list</button>
             </div>
             {supabase && !user && (
@@ -3421,7 +3457,7 @@ function PageInner() {
                 <div style={{ fontSize: 22 }}>☁️</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14.5, fontWeight: 700, color: C.text }}>Sign in to save across devices</div>
-                  <div style={{ fontSize: 12.5, color: C.muted, marginTop: 2, lineHeight: 1.4 }}>Your lists live only on this phone right now. Back them up and open them anywhere.</div>
+                  <div style={{ fontSize: 12.5, color: C.muted, marginTop: 2, lineHeight: 1.4 }}>Your lists and your Liked, Disliked, and Shared spots live only on this phone right now. Sign in to save them and open them on any device.</div>
                 </div>
                 <span style={{ fontSize: 13, fontWeight: 800, color: C.accent, whiteSpace: "nowrap" }}>Sign in ›</span>
               </div>
@@ -3432,6 +3468,21 @@ function PageInner() {
                 <span onClick={signOutUser} style={{ fontSize: 13, fontWeight: 700, color: C.accent, cursor: "pointer" }}>Sign out</span>
               </div>
             )}
+            <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: "0.4px", color: C.muted, textTransform: "uppercase", marginBottom: 2 }}>From your activity</div>
+            {[{ k: "liked", name: "Liked", emoji: "\uD83D\uDC4D", items: likedItems }, { k: "disliked", name: "Disliked", emoji: "\uD83D\uDC4E", items: dislikedItems }, { k: "shared", name: "Shared", emoji: "\uD83D\uDCE4", items: sharedItems }].map((f) => {
+              const cnt = Object.keys(f.items || {}).length;
+              return (
+                <div key={f.k} onClick={() => setSysFolder(f.k)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                  <div style={{ width: 48, height: 48, borderRadius: "50%", background: C.adim, border: `1px solid ${C.accent}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>{f.emoji}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{f.name}</div>
+                    <div style={{ fontSize: 13, color: C.muted }}>{cnt} place{cnt !== 1 ? "s" : ""} \u00b7 automatic</div>
+                  </div>
+                  <span style={{ color: C.muted, fontSize: 20 }}>\u203a</span>
+                </div>
+              );
+            })}
+            <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: "0.4px", color: C.muted, textTransform: "uppercase", marginTop: 18, marginBottom: 2 }}>Your lists</div>
             {Object.values(lists).map((l) => {
               const row = (
                 <div onClick={() => setActiveList(l.id)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
@@ -3450,6 +3501,35 @@ function PageInner() {
             <div style={{ fontSize: 11.5, color: C.muted, textAlign: "center", marginTop: 14 }}>Swipe a list left to delete it.</div>
           </div>
         )}
+
+        {screen === "saved" && sysFolder && (() => {
+          const cfg = { liked: { name: "Liked", emoji: "\uD83D\uDC4D", items: likedItems, empty: "Tap the thumbs up on any place and it lands here, newest first." }, disliked: { name: "Disliked", emoji: "\uD83D\uDC4E", items: dislikedItems, empty: "Places you thumbs down collect here, so you can revisit them or change your mind." }, shared: { name: "Shared", emoji: "\uD83D\uDCE4", items: sharedItems, empty: "Anything you share gets gathered here automatically." } }[sysFolder];
+          if (!cfg) return null;
+          const arr = Object.values(cfg.items || {}).filter((x) => x && x.place && x.place.id).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+          return (
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, paddingBottom: 14, borderBottom: `1px solid ${C.border}`, marginBottom: 14, paddingTop: 4 }}>
+                <button onClick={() => setSysFolder(null)} style={{ background: "none", border: "none", color: C.accent, fontSize: 22, cursor: "pointer" }}>\u2039</button>
+                <div style={{ flex: 1, fontSize: 17, fontWeight: 700, color: C.text }}>{cfg.emoji} {cfg.name}</div>
+                <span style={{ fontSize: 13, color: C.muted }}>{arr.length} place{arr.length !== 1 ? "s" : ""}</span>
+              </div>
+              {supabase && !user && arr.length > 0 && (
+                <div onClick={() => setAuthOpen(true)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 13px", borderRadius: 12, border: `1px solid ${C.accent}`, background: C.adim, marginBottom: 14, cursor: "pointer" }}>
+                  <span style={{ fontSize: 18 }}>\u2601\uFE0F</span>
+                  <div style={{ flex: 1, fontSize: 12.5, color: C.light, lineHeight: 1.4 }}>These live only on this phone. Sign in to save them.</div>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: C.accent, whiteSpace: "nowrap" }}>Sign in \u203a</span>
+                </div>
+              )}
+              {arr.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px", color: C.muted, fontSize: 14, lineHeight: 1.5 }}>{cfg.empty}</div>
+              ) : (
+                arr.map(({ place: p }) => (
+                  <PlaceCard key={p.id} p={p} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => quickSaveFavorite(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} onBadge={openExperience} />
+                ))
+              )}
+            </div>
+          );
+        })()}
 
         {screen === "saved" && activeList && lists[activeList] && (
           <div>
@@ -3646,7 +3726,7 @@ function PageInner() {
         {[{ id: "home", icon: "home", label: "Home" }, { id: "events", icon: "events", label: "Events" }, { id: "map", icon: "map", label: "Map" }, { id: "saved", icon: "saved", label: "Favorites" }].map((s) => {
           const active = (s.id === "home" && (screen === "suggested" || screen === "explore" || screen === "experience" || screen === "surprise")) || s.id === screen;
           return (
-          <button key={s.id} onClick={() => { setActiveList(null); if (s.id === "home") { openSuggested(); } else { setScreen(s.id); } }} style={{ flex: 1, padding: "12px 8px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "transparent", border: "none", cursor: "pointer" }}>
+          <button key={s.id} onClick={() => { setActiveList(null); setSysFolder(null); if (s.id === "home") { openSuggested(); } else { setScreen(s.id); } }} style={{ flex: 1, padding: "12px 8px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "transparent", border: "none", cursor: "pointer" }}>
             <NavIcon name={s.icon} color={active ? C.accent : C.muted} />
             <span style={{ fontSize: 11, fontWeight: active ? 700 : 600, color: active ? C.accent : C.muted }}>{s.label}</span>
           </button>
@@ -3660,7 +3740,7 @@ function PageInner() {
           <div style={{ ...sheet, overscrollBehaviorY: "contain", transition: SHEET_EASE }} onClick={(e) => e.stopPropagation()} onTouchStart={(e) => sheetDragStart(e, () => setDetail(null))} onTouchMove={sheetDragMove} onTouchEnd={sheetDragEnd}>
             <Grabber />
             <div style={{ position: "sticky", top: 0, zIndex: 5, background: C.panel, padding: "10px 12px", paddingTop: "max(10px, env(safe-area-inset-top))", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${C.border}` }}>
-              <button onClick={() => { logEvent("share", detail, { kind: "place" }); shareLink(detail.name, originUrl("/?place=" + encodeURIComponent(detail.id)), () => showToast("Link copied"), `Want to go to ${detail.name} together? Found it on Wayfind`); }} aria-label="Share spot" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 38, height: 38, borderRadius: "50%", border: `1px solid ${C.border}`, background: C.card, color: C.text, cursor: "pointer" }}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12" /><path d="M8 7l4-4 4 4" /><path d="M6 12v7a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-7" /></svg></button>
+              <button onClick={() => { logEvent("share", detail, { kind: "place" }); addShared(detail); shareLink(detail.name, originUrl("/?place=" + encodeURIComponent(detail.id)), () => showToast("Link copied"), `Want to go to ${detail.name} together? Found it on Wayfind`); }} aria-label="Share spot" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 38, height: 38, borderRadius: "50%", border: `1px solid ${C.border}`, background: C.card, color: C.text, cursor: "pointer" }}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12" /><path d="M8 7l4-4 4 4" /><path d="M6 12v7a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-7" /></svg></button>
               <button onClick={() => setDetail(null)} aria-label="Close" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 38, height: 38, borderRadius: "50%", border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 17, fontWeight: 700, lineHeight: 1, cursor: "pointer" }}>✕</button>
             </div>
             {detail.photos && detail.photos.length > 0 ? (
@@ -4638,7 +4718,7 @@ function PlaceCard({ p, rank, saved, liked, disliked, onDetail, onSave, onLike, 
             {onDislike && (
               <button onClick={onDislike} title={disliked ? "Undo" : "Not for me"} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: disliked ? "rgba(239,68,68,.12)" : "transparent", border: `1.5px solid ${disliked ? C.red : C.border}`, borderRadius: 999, color: disliked ? C.red : C.muted, fontSize: 13, fontWeight: 700, padding: "5px 11px", cursor: "pointer" }}>👎{disliked ? " Nope" : ""}</button>
             )}
-            <button onClick={(e) => { e.stopPropagation(); logEventAnon("share", p, { kind: "place_card" }); shareLink(p.name, p.mapsUrl || "", null, "Check out " + p.name + " on Wayfind"); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "transparent", border: `1.5px solid ${C.border}`, borderRadius: 999, color: C.light, fontSize: 12, fontWeight: 700, padding: "5px 12px", cursor: "pointer" }}>↗ Share</button>
+            <button onClick={(e) => { e.stopPropagation(); logEventAnon("share", p, { kind: "place_card" }); addShared(p); shareLink(p.name, p.mapsUrl || "", null, "Check out " + p.name + " on Wayfind"); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "transparent", border: `1.5px solid ${C.border}`, borderRadius: 999, color: C.light, fontSize: 12, fontWeight: 700, padding: "5px 12px", cursor: "pointer" }}>↗ Share</button>
           </div>
         </div>
       </div>
