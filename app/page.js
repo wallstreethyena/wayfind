@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v5.0";
+const BUILD = "v5.2";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -1441,7 +1441,20 @@ function placesForHook(hook, allSrc) {
 }
 
 // ─── Single full-width editorial hook card, for weaving into the feed ─────────
-function HookSolo({ h, place, liked, onOpen, onLike }) {
+// v5.2: short, punchy, data-true one-liner for a hook card subtitle (3-5 words).
+function wittyLine(p) {
+  if (!p) return "";
+  const r = p.rating, n = p.reviews || 0, d = p.distMi, pr = p.priceNum;
+  if (r != null && r >= 4.7 && n >= 300) return "Locals can't get enough";
+  if (r != null && r >= 4.5 && n > 0 && n < 250) return "A quiet local gem";
+  if (pr != null && pr <= 2 && r != null && r >= 4.2) return "Highly rated, easy price";
+  if (r != null && r >= 4.5) return "Rated near the top";
+  if (n >= 2000) return "The one everyone knows";
+  if (d != null && d <= 2) return "Right around the corner";
+  if (r != null && r >= 4.2) return "Worth a real look";
+  return "Worth checking out";
+}
+function HookSolo({ h, place, liked, onOpen, onLike, onShare }) {
   if (!h) return null;
   const acc = h.accent || C.accent;
   const photo = place && place.photo;
@@ -1452,17 +1465,27 @@ function HookSolo({ h, place, liked, onOpen, onLike }) {
         : <div style={{ position: "absolute", inset: 0, background: `linear-gradient(135deg, ${acc}50 0%, #0D1117 100%)` }} />}
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,.18) 0%, rgba(0,0,0,.55) 45%, rgba(0,0,0,.88) 100%)" }} />
       <div style={{ position: "absolute", bottom: 0, right: 0, width: 140, height: 140, background: `radial-gradient(circle at bottom right, ${acc}30 0%, transparent 65%)`, pointerEvents: "none" }} />
-      <div style={{ position: "absolute", top: 12, left: 12, right: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(0,0,0,.6)", border: `1px solid ${acc}70`, borderRadius: 999, padding: "4px 10px", backdropFilter: "blur(4px)" }}>
-          <span style={{ fontSize: 11 }}>{h.emoji}</span>
-          <span style={{ fontSize: 9, fontWeight: 800, color: acc, textTransform: "uppercase", letterSpacing: "0.8px" }}>{h.label}</span>
+      <div style={{ position: "absolute", top: 12, left: 12, right: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(0,0,0,.6)", border: `1px solid ${acc}70`, borderRadius: 999, padding: "4px 10px", backdropFilter: "blur(4px)" }}>
+            <span style={{ fontSize: 11 }}>{h.emoji}</span>
+            <span style={{ fontSize: 9, fontWeight: 800, color: acc, textTransform: "uppercase", letterSpacing: "0.8px" }}>{h.label}</span>
+          </div>
+          {place && place.distMi != null && (
+            <div style={{ display: "inline-flex", alignItems: "center", background: "rgba(0,0,0,.6)", border: "1px solid rgba(255,255,255,.25)", borderRadius: 999, padding: "4px 9px", backdropFilter: "blur(4px)" }}>
+              <span style={{ fontSize: 9.5, fontWeight: 800, color: "rgba(255,255,255,.9)" }}>{place.distMi.toFixed(1)} mi</span>
+            </div>
+          )}
         </div>
-        <button onClick={(e) => { e.stopPropagation(); onLike && onLike(h.id); }} style={{ width: 30, height: 30, borderRadius: "50%", background: liked ? acc : "rgba(0,0,0,.55)", border: `1.5px solid ${liked ? acc : "rgba(255,255,255,.35)"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, cursor: "pointer", backdropFilter: "blur(4px)" }}>{liked ? "❤️" : "🤍"}</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, flexShrink: 0 }}>
+          <button onClick={(e) => { e.stopPropagation(); onShare && onShare(h, place); }} aria-label="Share" style={{ width: 30, height: 30, borderRadius: "50%", background: "rgba(0,0,0,.55)", border: "1.5px solid rgba(255,255,255,.35)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(4px)", color: "#fff" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12" /><path d="M8 7l4-4 4 4" /><path d="M6 12v7a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-7" /></svg></button>
+          <button onClick={(e) => { e.stopPropagation(); onLike && onLike(h.id); }} aria-label="Save" style={{ width: 30, height: 30, borderRadius: "50%", background: liked ? acc : "rgba(0,0,0,.55)", border: `1.5px solid ${liked ? acc : "rgba(255,255,255,.35)"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, cursor: "pointer", backdropFilter: "blur(4px)" }}>{liked ? "❤️" : "🤍"}</button>
+        </div>
       </div>
       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "12px 14px 15px" }}>
         <div style={{ fontSize: 22, fontWeight: 800, color: "#fff", lineHeight: 1.22, marginBottom: 8, textShadow: "0 1px 6px rgba(0,0,0,.7)", letterSpacing: "-0.3px", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{renderHookText(h.hook, h.highlightWord, acc)}</div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,.65)", lineHeight: 1.3, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.detail}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "rgba(255,255,255,.95)", lineHeight: 1.3, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textShadow: "0 1px 4px rgba(0,0,0,.7)" }}>{wittyLine(place) || h.detail}</div>
           <div style={{ flexShrink: 0, fontSize: 12, fontWeight: 800, color: "#fff", background: acc, borderRadius: 999, padding: "6px 14px" }}>{h.cta || "See more →"}</div>
         </div>
       </div>
@@ -3531,7 +3554,7 @@ function PageInner() {
                   <div style={{ marginBottom: 16 }}>
                     <div style={{ fontSize: 15, fontWeight: 800, color: C.text, marginBottom: 10 }}>Worth a look near {locName ? locName.split(",")[0] : "you"}</div>
                     {sectionHooks.map((h) => (
-                      <HookSolo key={"homehook-" + h.id} h={h} place={pmH[h.placeId]} liked={hookLikes.has(h.id)} onOpen={openHook} onLike={onHookHeart} />
+                      <HookSolo key={"homehook-" + h.id} h={h} place={pmH[h.placeId]} liked={hookLikes.has(h.id)} onOpen={openHook} onLike={onHookHeart} onShare={(hk, pl) => { if (!pl) return; logEvent("share", pl, { kind: "hook" }); addShared(pl); shareLink(pl.name, originUrl("/?place=" + encodeURIComponent(pl.id)), () => showToast("Link copied"), "Check out " + pl.name + " on Wayfind"); }} />
                     ))}
                   </div>
                 );
@@ -3612,7 +3635,7 @@ function PageInner() {
                 rest.forEach((p, i) => {
                   if (i > 0 && i % 6 === 0 && inlineHooks.length) {
                     const h = inlineHooks[(Math.floor(i / 6) - 1) % inlineHooks.length];
-                    if (h) out.push(<HookSolo key={`hook-${h.id}-${i}`} h={h} place={pm[h.placeId]} liked={hookLikes.has(h.id)} onOpen={openHook} onLike={onHookHeart} />);
+                    if (h) out.push(<HookSolo key={`hook-${h.id}-${i}`} h={h} place={pm[h.placeId]} liked={hookLikes.has(h.id)} onOpen={openHook} onLike={onHookHeart} onShare={(hk, pl) => { if (!pl) return; logEvent("share", pl, { kind: "hook" }); addShared(pl); shareLink(pl.name, originUrl("/?place=" + encodeURIComponent(pl.id)), () => showToast("Link copied"), "Check out " + pl.name + " on Wayfind"); }} />);
                   }
                   out.push(<PlaceCard key={p.id} p={p} rank={i + 5} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => quickSaveFavorite(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} />);
                 });
@@ -4168,7 +4191,7 @@ function PageInner() {
               <div style={{ position: "relative" }}>
                 <div ref={galleryRef} style={{ display: "flex", gap: 6, overflowX: "auto", scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" }}>
                   {detail.photos.map((src, i) => (
-                    <FallbackImg key={i} src={src} icon="🍽️" onClick={() => setLightbox(src)} style={{ width: detail.photos.length > 1 ? "88%" : "100%", flexShrink: 0, height: 240, objectFit: "cover", scrollSnapAlign: "start", cursor: "zoom-in" }} />
+                    <FallbackImg key={i} src={src} icon={detail._event ? "🎟️" : "🍽️"} onClick={() => setLightbox(src)} style={{ width: detail.photos.length > 1 ? "88%" : "100%", flexShrink: 0, height: 240, objectFit: "cover", scrollSnapAlign: "start", cursor: "zoom-in" }} />
                   ))}
                 </div>
                 {detail.photos.length > 1 && (
@@ -4179,18 +4202,33 @@ function PageInner() {
                 )}
               </div>
             ) : (
-              <FallbackImg src={detail.photo} icon="🍽️" onClick={() => detail.photo && setLightbox(detail.photo)} style={{ width: "100%", height: 220, objectFit: "cover", cursor: detail.photo ? "zoom-in" : "default" }} />
+              <FallbackImg src={detail.photo} icon={detail._event ? "🎟️" : "🍽️"} onClick={() => detail.photo && setLightbox(detail.photo)} style={{ width: "100%", height: 220, objectFit: "cover", cursor: detail.photo ? "zoom-in" : "default" }} />
             )}
             <div style={{ padding: "16px 16px calc(30px + env(safe-area-inset-bottom))" }}>
               {/* 1. Basics */}
-              {detail._event && (
-                <div style={{ background: C.adim, border: `1px solid ${C.accent}`, borderRadius: 12, padding: "10px 13px", marginBottom: 12 }}>
-                  <div style={{ fontSize: 11, fontWeight: 800, color: C.accent, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 3 }}>🎟️ Event</div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: C.text, lineHeight: 1.3 }}>{detail._event.name}</div>
-                  {(detail._event.date || detail._event.time) && <div style={{ fontSize: 13, fontWeight: 700, color: C.light, marginTop: 3 }}>{[detail._event.date, detail._event.time].filter(Boolean).join(" · ")}</div>}
-                  <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>at {detail.name}</div>
-                </div>
-              )}
+              {detail._event && (() => {
+                const ef = formatEventDate(detail._event.date, detail._event.time);
+                const human = ef.wd ? (ef.wd + ", " + ef.mo + " " + ef.day + (ef.time ? " · " + ef.time : "")) : (ef.time || [detail._event.date, detail._event.time].filter(Boolean).join(" · "));
+                const url = detail._event.url || "";
+                const hasTickets = /ticket|seatgeek|stubhub|axs|livenation|eventbrite/i.test(url);
+                const place = locName ? locName.split(",")[0] : "you";
+                const why = [];
+                if (detail.rating != null && detail.rating >= 4.3) why.push("at a highly rated venue"); else why.push("at " + detail.name);
+                if (detail.distMi != null) why.push(detail.distMi.toFixed(1) + " mi from " + place);
+                return (
+                  <div style={{ border: `1.5px solid ${C.accent}`, borderRadius: 16, overflow: "hidden", marginBottom: 14, background: `linear-gradient(160deg, ${C.adim} 0%, ${C.card} 70%)` }}>
+                    <div style={{ padding: "14px 15px" }}>
+                      <div style={{ fontSize: 10.5, fontWeight: 800, color: C.accent, textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 6 }}>🎟️ Upcoming event</div>
+                      <div style={{ fontSize: 19, fontWeight: 800, color: C.text, lineHeight: 1.25 }}>{detail._event.name}</div>
+                      {human && <div style={{ fontSize: 14, fontWeight: 800, color: C.accent, marginTop: 7 }}>{human}</div>}
+                      <div style={{ fontSize: 13, color: C.light, marginTop: 5 }}>📍 {detail.name}{detail.distMi != null ? " · " + detail.distMi.toFixed(1) + " mi" : ""}</div>
+                      {why.length > 0 && <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.45, marginTop: 7 }}>{why.join(", ") + "."}</div>}
+                      {url && <a href={url} target="_blank" rel="noreferrer" style={{ display: "block", textAlign: "center", marginTop: 12, padding: 12, background: C.accent, borderRadius: 12, color: "#0D1117", fontSize: 14.5, fontWeight: 800, textDecoration: "none" }}>{hasTickets ? "Get tickets ↗" : "View event ↗"}</a>}
+                    </div>
+                  </div>
+                );
+              })()}
+              {detail._event && <div style={{ fontSize: 10.5, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 4 }}>Venue</div>}
               <div style={{ fontSize: 21, fontWeight: 800, marginBottom: 6, color: C.text, lineHeight: 1.25 }}>{detail.name}</div>
               {detail.address && (
                 <a href={detail.mapsUrl} target="_blank" rel="noreferrer" style={{ display: "block", fontSize: 12.5, color: C.muted, textDecoration: "none", marginBottom: 10, lineHeight: 1.4 }}>📍 {detail.address}</a>
@@ -4207,7 +4245,10 @@ function PageInner() {
                   </span>
                 )}
                 {detail.priceNum != null ? <PriceMeter level={detail.priceNum} word /> : (detail.price && <span style={{ fontSize: 13, color: C.green, fontWeight: 700 }}>{detail.price}</span>)}
-                {detail.openNow != null && <button onClick={() => setHoursOpen((o) => !o)} style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "transparent", border: "none", padding: 0, cursor: "pointer", fontSize: 13, fontWeight: 700, color: detail.openNow ? C.green : C.red }}>{detail.openNow ? "Open" : "Closed"} <span style={{ fontSize: 10 }}>{hoursOpen ? "▴" : "▾"}</span></button>}
+                {detail.openNow != null && (detail._event
+                  ? <button onClick={() => setHoursOpen((o) => !o)} style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "transparent", border: "none", padding: 0, cursor: "pointer", fontSize: 12.5, fontWeight: 700, color: C.muted }}>{detail.openNow ? "Venue open now" : "Venue currently closed"} <span style={{ fontSize: 10 }}>{hoursOpen ? "▴" : "▾"}</span></button>
+                  : <button onClick={() => setHoursOpen((o) => !o)} style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "transparent", border: "none", padding: 0, cursor: "pointer", fontSize: 13, fontWeight: 700, color: detail.openNow ? C.green : C.red }}>{detail.openNow ? "Open" : "Closed"} <span style={{ fontSize: 10 }}>{hoursOpen ? "▴" : "▾"}</span></button>
+                )}
                 {detail.distMi != null && <span style={{ fontSize: 13, color: C.muted }}>· {detail.distMi.toFixed(1)} mi</span>}
               </div>
 
@@ -4303,7 +4344,7 @@ function PageInner() {
               {/* 2. Why Wayfind picked it */}
               <div style={{ background: C.adim, border: `1px solid ${C.accent}`, borderRadius: 14, padding: "12px 14px", marginBottom: 14 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 800, color: C.accent, letterSpacing: "0.5px" }}>WHY WAYFIND PICKED IT</span>
+                  <span style={{ fontSize: 10.5, fontWeight: 800, color: C.accent, letterSpacing: "0.5px" }}>{detail._event ? "WHY THIS VENUE" : "WHY WAYFIND PICKED IT"}</span>
                   {(() => { const sl = scoreLabel(detail.wfScore); return sl ? <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4 }}><span style={{ fontSize: 22, fontWeight: 900, color: C.accent, lineHeight: 1 }}>{sl.s}</span><span style={{ fontSize: 11, color: C.muted, fontWeight: 700 }}>/ 10</span></span> : null; })()}
                 </div>
                 <div style={{ fontSize: 13, color: C.text, lineHeight: 1.5, marginTop: 7 }}>{(() => {
