@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v5.6";
+const BUILD = "v5.7";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -1455,9 +1455,12 @@ function placesForHook(hook, allSrc) {
     const pri = allSrc.find((x) => x.id === primaryId);
     out = pri ? [pri, ...byScore.filter((p) => p.id !== pri.id).slice(0, 4)] : byScore.slice(0, 5);
   }
-  if (out.length === 0 && primaryId) {
+  // v5.7 trust fix: the card headlines one specific place (hook.placeId). Always keep
+  // that exact place at the front of the opened list, so tapping a card never lands on
+  // a list that is missing the very spot it was recommending.
+  if (primaryId) {
     const pri = allSrc.find((x) => x.id === primaryId);
-    if (pri) out = [pri];
+    if (pri) out = [pri, ...out.filter((p) => p && p.id !== pri.id)];
   }
   return out;
 }
