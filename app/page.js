@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v6.20";
+const BUILD = "v6.21";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -3868,58 +3868,13 @@ function PageInner() {
                   </button>
                 )}
               </div>
-              {!suggestedLoading && suggested !== null && heroPick && (
-                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.7, textTransform: "uppercase", color: C.accent, margin: "2px 2px 8px" }}>Your next move</div>
-              )}
-              {!suggestedLoading && suggested !== null && heroPick && (
-                <div style={{ marginBottom: 16, border: `1.5px solid ${C.accent}`, borderRadius: 18, overflow: "hidden", background: `linear-gradient(160deg, rgba(255,150,70,.10) 0%, ${C.card} 60%)`, boxShadow: "0 6px 24px rgba(0,0,0,.35)" }}>
-                  <div onClick={() => openDetail(heroPick)} style={{ cursor: "pointer" }}>
-                    <div style={{ position: "relative" }}>
-                      <FallbackImg src={heroPick.photo} icon="📍" style={{ width: "100%", height: 185, objectFit: "cover", display: "block" }} />
-                      <div style={{ position: "absolute", top: 12, left: 12, display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(0,0,0,.62)", border: `1px solid ${C.accent}80`, borderRadius: 999, padding: "5px 11px", backdropFilter: "blur(4px)" }}>
-                        <span style={{ fontSize: 12 }}>{heroBadgeIcon}</span>
-                        <span style={{ fontSize: 10, fontWeight: 800, color: C.accent, textTransform: "uppercase", letterSpacing: "0.7px" }}>{heroBadgeText}</span>
-                      </div>
-                      <button onClick={(e) => { e.stopPropagation(); logEvent("share", heroPick, { kind: "hero" }); addShared(heroPick); shareLink(heroPick.name, placeShareUrl(heroPick, locName), () => showToast("Link copied"), "Check out " + heroPick.name + " on Wayfind"); }} aria-label="Share" style={{ position: "absolute", top: 12, right: 12, width: 34, height: 34, borderRadius: "50%", background: "rgba(0,0,0,.62)", border: "1.5px solid rgba(255,255,255,.4)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(4px)", color: "#fff" }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12" /><path d="M8 7l4-4 4 4" /><path d="M6 12v7a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-7" /></svg></button>
-                    </div>
-                    <div style={{ padding: 16 }}>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: C.text, lineHeight: 1.2 }}>{heroPick.name}</div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                        {heroSl && <span style={{ fontSize: 14, fontWeight: 800, color: C.text }}>{heroSl.word}</span>}
-                        {heroSl && <span style={{ fontSize: 11.5, fontWeight: 700, color: C.text }}>{heroSl.s}/10</span>}
-                        {heroPick.rating && <span style={{ color: "#F59E0B", fontSize: 13 }}>★ {heroPick.rating}</span>}
-                        {heroPick.reviews != null && <span style={{ fontSize: 12, color: C.text }}>· {heroPick.reviews.toLocaleString()} reviews</span>}
-                        {liveOpen(heroPick) === true && <span style={{ fontSize: 12, fontWeight: 700, color: C.green }}>· Open now</span>}
-                        {liveOpen(heroPick) === false && <span style={{ fontSize: 12, fontWeight: 700, color: heroPick.nextOpen && heroPick.nextOpen.today ? C.gold : C.red }}>· {heroPick.nextOpen && heroPick.nextOpen.today ? heroPick.nextOpen.label : "Closed"}</span>}
-                        {heroPick.distMi != null && <span style={{ fontSize: 12, color: C.text }}>· {heroPick.distMi.toFixed(1)} mi</span>}
-                      </div>
-                      {heroWhy.length > 0 && <div style={{ fontSize: 13.5, color: C.light, lineHeight: 1.5, marginTop: 10 }}><span style={{ color: C.accent, fontWeight: 800 }}>Why: </span>{heroWhy.slice(0, 4).join(" · ")}</div>}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 10, padding: "0 16px 16px" }}>
-                    <button onClick={() => openDetail(heroPick)} style={{ flex: 2, background: C.accent, color: "#0D1117", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 800, padding: "13px 0", cursor: "pointer" }}>Take me there →</button>
-                    {heroOrder.length > 1 && (
-                      <button onClick={() => setHeroNonce((n) => n + 1)} style={{ flex: 1, background: "transparent", color: C.light, border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 13.5, fontWeight: 800, padding: "13px 0", cursor: "pointer" }}>Show me another</button>
-                    )}
-                  </div>
-                </div>
-              )}
+              {/* v6.21: the single hero is now the experience hero below (random themed curated list, the shareable anchor). The old place hero was removed to keep one hero. */}
               {/* Wayfind Picks now renders as the first hook card inside the "Worth a look" section below, matching the editorial cards. */}
               {/* "Worth a look near you": Wayfind Picks first, editorial hooks in the middle, Roll the Dice last. Same hook-card shape, different accent colors, so they blend. */}
-              {(picksHook || sectionHooks.length > 0 || (suggested && suggested.length > 0)) && (() => {
-                const pmH = {};
-                [...(suggested || []), ...places].filter(Boolean).forEach((pp) => { if (pp && pp.id) pmH[pp.id] = pp; });
-                const picksTop = picksHook ? pmH[picksHook.placeId] : null;
-                const diceHook = { id: "dice-roll", accent: C.purple, emoji: "🎲", label: "Roll the Dice", hook: "Cannot decide where to go?", highlightWord: "decide", subtitle: "One strong spot near you, picked instantly", cta: "🎲 Roll for me →" };
-                const canRoll = !!(suggested && suggested.length > 0);
+              {(suggested && suggested.length > 0) && (() => {
                 const shareHook = (hk, pl) => { if (!pl) return; logEvent("share", pl, { kind: "hook" }); addShared(pl); shareLink(pl.name, placeShareUrl(pl, locName), () => showToast("Link copied"), "Check out " + pl.name + " on Wayfind"); };
-                // Top 10 reads as a collection: a 4 photo collage from the highest scoring places, not one borrowed place photo.
-                const picksPhotos = [...displayList].filter((p) => p && p.photo).sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 4).map((p) => p.photo);
-                // No place may appear twice in the feed. Dedupe by place id first (photo urls are not stable across fetches), never repeat the hero, and keep photo only as a secondary guard.
-                const usedPhotos = new Set([heroPick && heroPick.photo, ...picksPhotos].filter(Boolean));
-                const usedIds = new Set([heroPick && heroPick.id].filter(Boolean));
-                // Themed experience cards: each card is a distinct experience with its own
-                // description, illustrated by a real nearby place, and it opens that curated list on tap.
+                const diceHook = { id: "dice-roll", accent: C.purple, emoji: "🎲", label: "Roll the Dice", hook: "Cannot decide where to go?", highlightWord: "decide", subtitle: "One strong spot near you, picked instantly", cta: "🎲 Roll for me →" };
+                // One experience hero anchors the feed. The curated list it opens is the shareable anchor.
                 const THEME_ORDER = ["localfav", "gem", "value", "instagram", "waterfront", "livemusic", "family", "romantic", "breakfast", "coffee"];
                 const THEME_COLOR = { localfav: C.gold, gem: C.teal, value: C.green, instagram: C.pink, waterfront: C.blue, livemusic: C.purple, family: C.green, romantic: C.pink, breakfast: C.accent, coffee: C.accent };
                 const expPool = [];
@@ -3928,37 +3883,24 @@ function PageInner() {
                 const poolKeys = new Map();
                 expPool.forEach((p) => { try { poolKeys.set(p.id, new Set(experienceBadges(p, null, 99).map((b) => b.key))); } catch (er) { poolKeys.set(p.id, new Set()); } });
                 const matchesExp = (p, key) => { const e = EXPERIENCES[key]; if (!e) return false; if (e.filter) { try { return !!e.filter(p); } catch (er) { return false; } } const ks = poolKeys.get(p.id); return ks ? ks.has(key) : false; };
-                const usedThemePlace = new Set([heroPick && heroPick.id].filter(Boolean));
-                const themeCards = [];
-                for (const key of THEME_ORDER) {
-                  const e = EXPERIENCES[key];
-                  if (!e) continue;
-                  const match = expPool.filter((p) => p && p.photo && !usedThemePlace.has(p.id) && matchesExp(p, key)).sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0))[0];
-                  if (!match) continue;
-                  usedThemePlace.add(match.id);
-                  themeCards.push({ key, place: match, e });
-                  if (themeCards.length >= 7) break;
-                }
+                const avail = [];
+                for (const key of THEME_ORDER) { const e = EXPERIENCES[key]; if (!e) continue; const match = expPool.filter((p) => p && p.photo && matchesExp(p, key)).sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0))[0]; if (match) avail.push({ key, place: match, e }); }
+                const pick = avail.length ? avail[heroNonce % avail.length] : null;
                 return (
                   <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: C.text, marginBottom: 10 }}>Best near {locName ? locName.split(",")[0] : "you"} right now</div>
-                    {picksHook && (
-                      <HookSolo h={{ ...picksHook, brand: true }} liked={hookLikes.has(picksHook.id)} onOpen={openHook} onLike={onHookHeart} onShare={() => shareHook(picksHook, picksTop)} />
-                    )}
-                    {themeCards.length > 0 && (
-                      <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: "0.6px", margin: "4px 0 10px" }}>Browse by experience</div>
-                    )}
-                    {/* Each themed card = one experience, its own description, a real nearby place for the photo, and the curated list on tap. */}
-                    {themeCards.map(({ key, place, e }) => {
+                    {pick && (() => {
+                      const { key, place, e } = pick;
                       const t = themedHook(key, place);
                       const dh = { id: "exp-" + key, accent: THEME_COLOR[key] || C.accent, emoji: e.icon, label: e.label, theme: key, placeId: place.id, highlightWord: t.hl, hook: t.hook, subtitle: t.sub, cta: t.cta, themeTitle: e.title, themeBody: e.lead };
-                      return (
-                        <HookSolo key={"exp-" + key} h={dh} place={place} hideLike hideShare onOpen={openHook} />
-                      );
-                    })}
-                    {canRoll && (
-                      <HookSolo h={diceHook} place={null} liked={false} onOpen={() => openSurprise()} />
-                    )}
+                      return (<>
+                        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.7, textTransform: "uppercase", color: C.accent, margin: "2px 2px 8px" }}>Your next move</div>
+                        <HookSolo h={dh} place={place} hideLike onOpen={openHook} onShare={() => shareHook(dh, place)} />
+                        {avail.length > 1 && (
+                          <button onClick={() => setHeroNonce((n) => n + 1)} style={{ display: "block", width: "100%", margin: "0 0 14px", padding: "10px 0", background: "transparent", color: C.light, border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: "pointer" }}>Show me another experience</button>
+                        )}
+                      </>);
+                    })()}
+                    <HookSolo h={diceHook} place={null} liked={false} onOpen={() => openSurprise()} />
                   </div>
                 );
               })()}
