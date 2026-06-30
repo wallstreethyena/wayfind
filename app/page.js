@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v4.8";
+const BUILD = "v4.9";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -1357,6 +1357,35 @@ function normalizeHook(h) {
 }
 // Picks actually related to a debated place: same dessert/food subtype first,
 // then same category, then fill. Keeps an ice-cream debate from listing museums.
+// v4.9: honest "could be a better fit" — same-category places that beat the one
+// being viewed on a concrete axis (open, rating, distance, price, proof). Returns
+// [{ p, reasons }]; empty when nothing genuinely beats the current pick.
+function betterAlternatives(current, pool, n) {
+  if (!current) return [];
+  const cat = primaryCategory(current);
+  const curR = current.rating != null ? current.rating : 0;
+  const curD = current.distMi;
+  const curRev = current.reviews != null ? current.reviews : 0;
+  const curP = current.priceNum;
+  const curOpen = current.openNow;
+  const seen = new Set([current.id]);
+  const out = [];
+  (pool || []).forEach((p) => {
+    if (!p || !p.id || seen.has(p.id)) return;
+    if (cat && primaryCategory(p) !== cat) return;
+    seen.add(p.id);
+    const reasons = [];
+    let edge = 0;
+    if (p.openNow === true && curOpen === false) { reasons.push("open now"); edge += 4; }
+    if (p.rating != null && p.rating >= curR + 0.2 && (p.reviews || 0) >= 25) { reasons.push("rated higher at " + p.rating + "★"); edge += 3; }
+    if (curD != null && p.distMi != null && p.distMi <= curD - 2) { reasons.push("closer, " + p.distMi.toFixed(1) + " mi vs " + curD.toFixed(1)); edge += 3; }
+    if (curP != null && p.priceNum != null && p.priceNum < curP && (p.rating || 0) >= curR - 0.2) { reasons.push("more affordable"); edge += 1; }
+    if ((p.reviews || 0) >= curRev * 2 && (p.reviews || 0) >= 300 && (p.rating || 0) >= curR - 0.1) { reasons.push("more reviewed, " + p.reviews.toLocaleString()); edge += 1; }
+    if (reasons.length) out.push({ p, reasons: reasons.slice(0, 2), edge: edge + ((p.wfScore || 0) / 1000) });
+  });
+  out.sort((a, b) => b.edge - a.edge);
+  return out.slice(0, n || 3);
+}
 function relatedPicks(allSrc, subject, n) {
   if (!subject) return [];
   const subCat = primaryCategory(subject) || "";
@@ -4568,6 +4597,44 @@ function PageInner() {
 
               {/* Hours now expand from the Open/Closed status badge near the title. */}
 
+              {(() => {
+                const altPool = dedupePlaces([...(suggested || []), ...places]);
+                const alts = betterAlternatives(detail, altPool, 3);
+                const Row = (p, reasons) => (
+                  <div key={"alt-" + p.id} onClick={() => openDetail(p)} style={{ display: "flex", gap: 11, alignItems: "center", background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 10, marginBottom: 8, cursor: "pointer" }}>
+                    <FallbackImg src={p.photo} icon="📍" style={{ width: 58, height: 58, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 14.5, fontWeight: 800, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginTop: 2 }}>
+                        {p.rating != null && <span style={{ fontSize: 12, color: "#F59E0B" }}>★ {p.rating}</span>}
+                        {p.openNow === true && <span style={{ fontSize: 11.5, fontWeight: 700, color: C.green }}>· Open</span>}
+                        {p.openNow === false && <span style={{ fontSize: 11.5, fontWeight: 700, color: C.red }}>· Closed</span>}
+                        {p.distMi != null && <span style={{ fontSize: 11.5, color: C.muted }}>· {p.distMi.toFixed(1)} mi</span>}
+                      </div>
+                      {reasons && reasons.length > 0 && <div style={{ fontSize: 12, color: C.accent, fontWeight: 700, lineHeight: 1.4, marginTop: 3 }}>Better here: {reasons.join(" · ")}</div>}
+                    </div>
+                    <span style={{ fontSize: 18, color: C.muted, flexShrink: 0 }}>›</span>
+                  </div>
+                );
+                if (alts.length > 0) {
+                  return (
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: C.text, marginBottom: 3 }}>Could be a better fit</div>
+                      <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.45, marginBottom: 10 }}>A few spots nearby that beat this one on something that might matter to you. Tap to compare.</div>
+                      {alts.map(({ p, reasons }) => Row(p, reasons))}
+                    </div>
+                  );
+                }
+                const others = relatedPicks(altPool, detail, 4).filter((p) => p && p.id !== detail.id).slice(0, 3);
+                if (others.length === 0) return null;
+                return (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: C.text, marginBottom: 3 }}>One of the strongest nearby</div>
+                    <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.45, marginBottom: 10 }}>Nothing close by clearly beats this pick right now. If you still want to compare, these are the next best in the same vein.</div>
+                    {others.map((p) => Row(p, null))}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
