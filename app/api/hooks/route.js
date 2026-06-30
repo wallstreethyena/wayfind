@@ -78,7 +78,7 @@ Return a JSON array of exactly 8 objects:
     "theme": "gem|skip|drive|value|open|popular|best|itinerary|latenight",
     "highlightWord": "one key word or short phrase from the hook text to highlight in the accent color — the most provocative/emotional word (e.g. overrated, waste, hidden, drive, tonight)",
     "themeTitle": "3-5 word punchy sheet title",
-    "themeBody": "2 bold sentences. Why this matters. Opinion-forward, specific, makes the reader feel something."
+    "themeBody": "2 punchy sentences in plain text, no asterisks or markdown. Why this matters. Opinion-forward, specific, makes the reader feel something."
   }
 ]`;
 

@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v4.3";
+const BUILD = "v4.4";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -1316,6 +1316,60 @@ function HooksBanner({ hooks, likedIds, totalLiked, onOpen, onLike, allPlaces, i
 
 // Compute the list of real places a hook represents (same logic the detail
 // sheet uses), so a card's heart can save the full list to Favorites.
+// ─── AI copy hygiene + relevance ─────────────────────────────────────────────
+// AI-written hooks and blurbs sometimes return markdown (the prompt asks for
+// "bold" sentences). Strip it so no raw **text** ever reaches the UI.
+function stripMd(s) {
+  if (typeof s !== "string" || !s) return s;
+  return s
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/~~([^~]+)~~/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/\*\*/g, "")
+    .replace(/`/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+function stripMdMap(obj) {
+  if (!obj || typeof obj !== "object") return obj;
+  const out = {};
+  for (const k in obj) out[k] = stripMd(obj[k]);
+  return out;
+}
+// Strip markdown from every text field of an AI hook. (CTA + color systematizing
+// is intentionally handled separately.)
+function normalizeHook(h) {
+  if (!h) return h;
+  return { ...h, hook: stripMd(h.hook), detail: stripMd(h.detail), themeTitle: stripMd(h.themeTitle), themeBody: stripMd(h.themeBody), highlightWord: stripMd(h.highlightWord) };
+}
+// Picks actually related to a debated place: same dessert/food subtype first,
+// then same category, then fill. Keeps an ice-cream debate from listing museums.
+function relatedPicks(allSrc, subject, n) {
+  if (!subject) return [];
+  const subCat = primaryCategory(subject) || "";
+  const subName = ("" + (subject.name || "")).toLowerCase();
+  const subType = ("" + (subject.type || "")).toLowerCase();
+  const DESSERT = /ice ?cream|gelato|dessert|frozen yogurt|froyo|creamery|custard|donut|doughnut|bakery|cupcake|candy|chocolate|sweets/;
+  const isDessert = DESSERT.test(subName) || DESSERT.test(subType);
+  const pool = (allSrc || []).filter((p) => p && p.id && p.id !== subject.id);
+  let tier1 = [];
+  if (isDessert) tier1 = pool.filter((p) => DESSERT.test(("" + (p.name || "")).toLowerCase()) || DESSERT.test(("" + (p.type || "")).toLowerCase()));
+  const t1 = new Set(tier1.map((p) => p.id));
+  const sameCat = subCat ? pool.filter((p) => (primaryCategory(p) || "") === subCat && !t1.has(p.id)) : [];
+  tier1.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  sameCat.sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0));
+  let result = [subject, ...tier1, ...sameCat];
+  if (result.length < n) {
+    const have = new Set(result.map((p) => p.id));
+    const fill = [...pool].sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).filter((p) => !have.has(p.id));
+    result = [...result, ...fill];
+  }
+  return result.slice(0, n);
+}
+
 function placesForHook(hook, allSrc) {
   const theme = (hook && hook.theme) || "best";
   const primaryId = hook && hook.placeId;
@@ -1329,7 +1383,7 @@ function placesForHook(hook, allSrc) {
   } else if (theme === "skip") out = allSrc.filter((p) => p.rating && p.rating < 3.9 && p.reviews >= 50).sort((a, b) => (a.rating || 5) - (b.rating || 5)).slice(0, 4);
   else if (theme === "value") out = allSrc.filter((p) => p.rating >= 4.2 && (p.priceNum === 1 || p.priceNum === 0)).sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 5);
   else if (theme === "open") out = allSrc.filter((p) => p.openNow === true).sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 5);
-  else if (theme === "popular" || theme === "overrated") out = [...allSrc].sort((a, b) => (b.reviews || 0) - (a.reviews || 0)).slice(0, 5);
+  else if (theme === "popular" || theme === "overrated") { const pri = allSrc.find((x) => x.id === primaryId); out = pri ? relatedPicks(allSrc, pri, 5) : [...allSrc].sort((a, b) => (b.reviews || 0) - (a.reviews || 0)).slice(0, 5); }
   else if (theme === "drive") out = allSrc.filter((p) => p.distMi != null && p.distMi > 12 && p.rating >= 4.4).sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 3);
   else if (theme === "itinerary") {
     const food = allSrc.filter((p) => (primaryCategory(p) || "") === "Food").sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 2);
@@ -1367,7 +1421,7 @@ function HookSolo({ h, place, liked, onOpen, onLike }) {
         <button onClick={(e) => { e.stopPropagation(); onLike && onLike(h.id); }} style={{ width: 30, height: 30, borderRadius: "50%", background: liked ? acc : "rgba(0,0,0,.55)", border: `1.5px solid ${liked ? acc : "rgba(255,255,255,.35)"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, cursor: "pointer", backdropFilter: "blur(4px)" }}>{liked ? "❤️" : "🤍"}</button>
       </div>
       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "12px 14px 15px" }}>
-        <div style={{ fontSize: 22, fontWeight: 800, color: "#fff", lineHeight: 1.22, marginBottom: 8, textShadow: "0 1px 6px rgba(0,0,0,.7)", letterSpacing: "-0.3px" }}>{renderHookText(h.hook, h.highlightWord, acc)}</div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: "#fff", lineHeight: 1.22, marginBottom: 8, textShadow: "0 1px 6px rgba(0,0,0,.7)", letterSpacing: "-0.3px", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{renderHookText(h.hook, h.highlightWord, acc)}</div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
           <div style={{ fontSize: 12, color: "rgba(255,255,255,.65)", lineHeight: 1.3, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.detail}</div>
           <div style={{ flexShrink: 0, fontSize: 12, fontWeight: 800, color: "#fff", background: acc, borderRadius: 999, padding: "6px 14px" }}>{h.cta || "See more →"}</div>
@@ -2181,7 +2235,7 @@ function PageInner() {
       });
       const data = await res.json();
       if (data && data.blurbs && typeof data.blurbs === "object") {
-        setBlurbs((prev) => ({ ...prev, ...data.blurbs }));
+        setBlurbs((prev) => ({ ...prev, ...stripMdMap(data.blurbs) }));
         setCachedLines(data.blurbs);
       }
     } catch {}
@@ -2525,7 +2579,7 @@ function PageInner() {
           }),
         });
         const data = await res.json();
-        if (!cancelled && data.hooks && data.hooks.length > 0) setAiHooks(data.hooks);
+        if (!cancelled && data.hooks && data.hooks.length > 0) setAiHooks(data.hooks.map(normalizeHook));
       } catch { /* fall back to static hooks silently */ }
     })();
     return () => { cancelled = true; };
@@ -3059,7 +3113,7 @@ function PageInner() {
         </div>
         {screen === "suggested" && (
         <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 9, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-          <span style={{ fontSize: 11.5, fontWeight: 700, color: C.muted, flexShrink: 0 }}>Recently added:</span>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: C.muted, flexShrink: 0 }}>Explore other areas:</span>
           {FEATURED_AREAS.map((a) => (
             <button key={a.name} onClick={() => jumpToArea(a)} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 11px", borderRadius: 999, border: `1px solid ${C.border}`, background: C.card, color: C.light, fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
               <span>📍</span>{a.short}
@@ -4496,34 +4550,9 @@ function PageInner() {
 
         // Theme-specific place curation — each theme shows the right number
         // of places, curated from real data. "Top 5" = exactly 5. "Skip" = 3.
-        let themePlaces = [];
         const byScore = [...allSrc].sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0));
-        if (theme === "top5" || theme === "best") {
-          themePlaces = byScore.slice(0, 5);
-        } else if (theme === "gem") {
-          themePlaces = allSrc.filter((p) => p.rating >= 4.4 && p.reviews >= 15 && p.reviews < 450).sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 5);
-          const pri = allSrc.find((x) => x.id === primaryId);
-          if (pri && !themePlaces.find((p) => p.id === pri.id)) themePlaces = [pri, ...themePlaces].slice(0, 5);
-        } else if (theme === "skip") {
-          themePlaces = allSrc.filter((p) => p.rating && p.rating < 3.9 && p.reviews >= 50).sort((a, b) => (a.rating || 5) - (b.rating || 5)).slice(0, 4);
-        } else if (theme === "value") {
-          themePlaces = allSrc.filter((p) => p.rating >= 4.2 && (p.priceNum === 1 || p.priceNum === 0)).sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 5);
-        } else if (theme === "open") {
-          themePlaces = allSrc.filter((p) => p.openNow === true).sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 5);
-        } else if (theme === "popular" || theme === "overrated") {
-          themePlaces = [...allSrc].sort((a, b) => (b.reviews || 0) - (a.reviews || 0)).slice(0, 5);
-        } else if (theme === "drive") {
-          themePlaces = allSrc.filter((p) => p.distMi != null && p.distMi > 12 && p.rating >= 4.4).sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 3);
-        } else if (theme === "itinerary") {
-          const food = allSrc.filter((p) => (primaryCategory(p) || "") === "Food").sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 2);
-          const night = allSrc.filter((p) => (primaryCategory(p) || "") === "Nightlife").sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 2);
-          themePlaces = [...food, ...night];
-        } else if (theme === "latenight") {
-          themePlaces = allSrc.filter((p) => p.openNow === true).sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0)).slice(0, 5);
-        } else {
-          const pri = allSrc.find((x) => x.id === primaryId);
-          themePlaces = pri ? [pri, ...byScore.filter((p) => p.id !== pri.id).slice(0, 4)] : byScore.slice(0, 5);
-        }
+        let themePlaces = placesForHook(hookDetail, allSrc);
+
         if (themePlaces.length === 0 && primaryId) {
           const pri = allSrc.find((x) => x.id === primaryId);
           if (pri) themePlaces = [pri];
