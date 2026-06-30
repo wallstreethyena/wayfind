@@ -4,7 +4,7 @@ import { CATEGORIES, SUBFILTERS, VIBES, getLoader, geocodeCity, reverseGeocode, 
 import { supabase } from "../lib/supabase";
 import MapView from "./components/MapView";
 
-const BUILD = "v5.4";
+const BUILD = "v5.5";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -296,6 +296,22 @@ function dedupePlaces(list, collapseBrand) {
   return out2;
 }
 
+// v5.5: build a share URL whose landing page (/p/[id]) renders a branded Wayfind
+// preview card in iMessage and social, then bounces the visitor into the app.
+function placeShareUrl(p, loc) {
+  if (!p || !p.id) return originUrl("/");
+  const q = [];
+  const add = (k, v) => { if (v != null && v !== "") q.push(k + "=" + encodeURIComponent(String(v).slice(0, 80))); };
+  add("t", p.name || "");
+  add("loc", loc ? String(loc).split(",")[0] : "");
+  if (p.rating != null) add("r", p.rating);
+  if (p.reviews != null) add("rev", p.reviews);
+  if (p.distMi != null) add("mi", p.distMi.toFixed(1));
+  add("cat", primaryCategory(p) || "");
+  const sl = scoreLabel(p.wfScore);
+  if (sl && sl.s != null) add("sc", sl.s);
+  return originUrl("/p/" + encodeURIComponent(p.id) + (q.length ? "?" + q.join("&") : ""));
+}
 function scoreLabel(wf) {
   if (wf == null) return null;
   const s = (wf / 10).toFixed(1);
@@ -2975,7 +2991,12 @@ function PageInner() {
     txt += ".";
     if (t && t.good && t.good.length) txt += ` Good for ${t.good.join(", ")}.`;
     txt += " via Wayfind";
-    shareLink(`${when} in ${place}`, originUrl("/"), () => showToast("Copied"), txt);
+    const takeStr = (t && t.good && t.good.length) ? ("Good for " + t.good.join(", ")) : "";
+    let wurl = "/w?loc=" + encodeURIComponent(place);
+    if (weather.temp != null) wurl += "&temp=" + encodeURIComponent(weather.temp);
+    if (weather.label) wurl += "&cond=" + encodeURIComponent(weather.label);
+    if (takeStr) wurl += "&take=" + encodeURIComponent(takeStr.slice(0, 110));
+    shareLink(`${when} in ${place}`, originUrl(wurl), () => showToast("Copied"), txt);
   }
   // Build a shareable link. With Supabase we store the list and share a short
   // code, so the URL is clean and unfurls into a rich preview. Without it we
@@ -3529,7 +3550,7 @@ function PageInner() {
                         <span style={{ fontSize: 12 }}>{heroBadgeIcon}</span>
                         <span style={{ fontSize: 10, fontWeight: 800, color: C.accent, textTransform: "uppercase", letterSpacing: "0.7px" }}>{heroBadgeText}</span>
                       </div>
-                      <button onClick={(e) => { e.stopPropagation(); logEvent("share", heroPick, { kind: "hero" }); addShared(heroPick); shareLink(heroPick.name, originUrl("/?place=" + encodeURIComponent(heroPick.id)), () => showToast("Link copied"), "Check out " + heroPick.name + " on Wayfind"); }} aria-label="Share" style={{ position: "absolute", top: 12, right: 12, width: 34, height: 34, borderRadius: "50%", background: "rgba(0,0,0,.62)", border: "1.5px solid rgba(255,255,255,.4)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(4px)", color: "#fff" }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12" /><path d="M8 7l4-4 4 4" /><path d="M6 12v7a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-7" /></svg></button>
+                      <button onClick={(e) => { e.stopPropagation(); logEvent("share", heroPick, { kind: "hero" }); addShared(heroPick); shareLink(heroPick.name, placeShareUrl(heroPick, locName), () => showToast("Link copied"), "Check out " + heroPick.name + " on Wayfind"); }} aria-label="Share" style={{ position: "absolute", top: 12, right: 12, width: 34, height: 34, borderRadius: "50%", background: "rgba(0,0,0,.62)", border: "1.5px solid rgba(255,255,255,.4)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(4px)", color: "#fff" }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12" /><path d="M8 7l4-4 4 4" /><path d="M6 12v7a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-7" /></svg></button>
                     </div>
                     <div style={{ padding: 16 }}>
                       <div style={{ fontSize: 22, fontWeight: 800, color: C.text, lineHeight: 1.2 }}>{heroPick.name}</div>
@@ -3561,7 +3582,7 @@ function PageInner() {
                   <div style={{ marginBottom: 16 }}>
                     <div style={{ fontSize: 15, fontWeight: 800, color: C.text, marginBottom: 10 }}>Worth a look near {locName ? locName.split(",")[0] : "you"}</div>
                     {sectionHooks.map((h) => (
-                      <HookSolo key={"homehook-" + h.id} h={h} place={pmH[h.placeId]} liked={hookLikes.has(h.id)} onOpen={openHook} onLike={onHookHeart} onShare={(hk, pl) => { if (!pl) return; logEvent("share", pl, { kind: "hook" }); addShared(pl); shareLink(pl.name, originUrl("/?place=" + encodeURIComponent(pl.id)), () => showToast("Link copied"), "Check out " + pl.name + " on Wayfind"); }} />
+                      <HookSolo key={"homehook-" + h.id} h={h} place={pmH[h.placeId]} liked={hookLikes.has(h.id)} onOpen={openHook} onLike={onHookHeart} onShare={(hk, pl) => { if (!pl) return; logEvent("share", pl, { kind: "hook" }); addShared(pl); shareLink(pl.name, placeShareUrl(pl, locName), () => showToast("Link copied"), "Check out " + pl.name + " on Wayfind"); }} />
                     ))}
                   </div>
                 );
@@ -3642,7 +3663,7 @@ function PageInner() {
                 rest.forEach((p, i) => {
                   if (i > 0 && i % 6 === 0 && inlineHooks.length) {
                     const h = inlineHooks[(Math.floor(i / 6) - 1) % inlineHooks.length];
-                    if (h) out.push(<HookSolo key={`hook-${h.id}-${i}`} h={h} place={pm[h.placeId]} liked={hookLikes.has(h.id)} onOpen={openHook} onLike={onHookHeart} onShare={(hk, pl) => { if (!pl) return; logEvent("share", pl, { kind: "hook" }); addShared(pl); shareLink(pl.name, originUrl("/?place=" + encodeURIComponent(pl.id)), () => showToast("Link copied"), "Check out " + pl.name + " on Wayfind"); }} />);
+                    if (h) out.push(<HookSolo key={`hook-${h.id}-${i}`} h={h} place={pm[h.placeId]} liked={hookLikes.has(h.id)} onOpen={openHook} onLike={onHookHeart} onShare={(hk, pl) => { if (!pl) return; logEvent("share", pl, { kind: "hook" }); addShared(pl); shareLink(pl.name, placeShareUrl(pl, locName), () => showToast("Link copied"), "Check out " + pl.name + " on Wayfind"); }} />);
                   }
                   out.push(<PlaceCard key={p.id} p={p} rank={i + 5} saved={isSaved(p.id)} liked={!!liked[p.id]} disliked={!!disliked[p.id]} onDetail={() => openDetail(p)} onSave={() => quickSaveFavorite(p)} onLike={(e) => toggleLike(e, p)} onDislike={(e) => toggleDislike(e, p)} line={blurbs[p.id]} onBadge={openExperience} />);
                 });
@@ -4191,7 +4212,7 @@ function PageInner() {
           <div style={{ ...sheet, overscrollBehaviorY: "contain", transition: SHEET_EASE }} onClick={(e) => e.stopPropagation()} onTouchStart={(e) => sheetDragStart(e, () => setDetail(null))} onTouchMove={sheetDragMove} onTouchEnd={sheetDragEnd}>
             <Grabber />
             <div style={{ position: "sticky", top: 0, zIndex: 5, background: C.panel, padding: "10px 12px", paddingTop: "max(10px, env(safe-area-inset-top))", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${C.border}` }}>
-              <button onClick={() => { logEvent("share", detail, { kind: "place" }); addShared(detail); shareLink(detail.name, originUrl("/?place=" + encodeURIComponent(detail.id)), () => showToast("Link copied"), `Want to go to ${detail.name} together? Found it on Wayfind`); }} aria-label="Share spot" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 38, height: 38, borderRadius: "50%", border: `1px solid ${C.border}`, background: C.card, color: C.text, cursor: "pointer" }}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12" /><path d="M8 7l4-4 4 4" /><path d="M6 12v7a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-7" /></svg></button>
+              <button onClick={() => { logEvent("share", detail, { kind: "place" }); addShared(detail); shareLink(detail.name, placeShareUrl(detail, locName), () => showToast("Link copied"), `Want to go to ${detail.name} together? Found it on Wayfind`); }} aria-label="Share spot" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 38, height: 38, borderRadius: "50%", border: `1px solid ${C.border}`, background: C.card, color: C.text, cursor: "pointer" }}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12" /><path d="M8 7l4-4 4 4" /><path d="M6 12v7a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-7" /></svg></button>
               <button onClick={() => setDetail(null)} aria-label="Close" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 38, height: 38, borderRadius: "50%", border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 17, fontWeight: 700, lineHeight: 1, cursor: "pointer" }}>✕</button>
             </div>
             {detail.photos && detail.photos.length > 0 ? (
