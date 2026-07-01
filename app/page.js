@@ -1895,6 +1895,7 @@ function HookSolo({ h, place, liked, onOpen, onLike, onShare, collage, hideLike,
       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "12px 14px 14px" }}>
         <div style={{ fontSize: 20, fontWeight: 800, color: "#fff", lineHeight: 1.2, marginBottom: 5, textShadow: "0 1px 6px rgba(0,0,0,.7)", letterSpacing: "-0.3px", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{renderHookText(h.hook, h.highlightWord, acc)}</div>
         <div style={{ fontSize: 13.5, fontWeight: 600, color: "rgba(255,255,255,.95)", lineHeight: 1.34, marginBottom: 11, textShadow: "0 1px 4px rgba(0,0,0,.7)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{h.subtitle || wittyLine(place) || h.detail}</div>
+        {h.metaLine && <div style={{ marginBottom: 9 }}><span style={{ display: "inline-flex", alignItems: "center", fontSize: 11.5, fontWeight: 800, color: "#fff", background: "rgba(0,0,0,.42)", border: "1px solid rgba(255,255,255,.3)", borderRadius: 999, padding: "4px 11px", backdropFilter: "blur(4px)" }}>{h.metaLine}</span></div>}
         <div style={{ display: "inline-flex", alignItems: "center", fontSize: 12.5, fontWeight: 800, color: "#fff", background: acc, borderRadius: 999, padding: "7px 16px" }}>{h.cta || "See more →"}</div>
       </div>
     </div>
@@ -4058,7 +4059,7 @@ function PageInner() {
                       <div style={{ fontSize: 15.5, fontWeight: 800, color: C.text }}>{title}</div>
                       <span style={{ fontSize: 11, color: C.muted, fontWeight: 700, whiteSpace: "nowrap" }}>Top {list.length}</span>
                     </div>
-                    <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 6, lineHeight: 1.35 }}>{sub}</div>
+                    <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 6, lineHeight: 1.35 }}>{sub}{(() => { const avg = Dining.avgCostForTwo(list); return avg ? <span style={{ color: C.green, fontWeight: 700 }}>{"  ·  " + avg.text}</span> : null; })()}</div>
                     {list.map((p, i) => row(p, i, list.length))}
                   </div>
                 ) : null);
@@ -4081,7 +4082,8 @@ function PageInner() {
                 expPool.forEach((p) => { try { poolKeys.set(p.id, new Set(experienceBadges(p, null, 99).map((b) => b.key))); } catch (er) { poolKeys.set(p.id, new Set()); } });
                 const matchesExp = (p, key) => { const e = EXPERIENCES[key]; if (!e) return false; if (e.filter) { try { return !!e.filter(p); } catch (er) { return false; } } const ks = poolKeys.get(p.id); return ks ? ks.has(key) : false; };
                 const avail = [];
-                for (const key of THEME_ORDER) { const e = EXPERIENCES[key]; if (!e) continue; const match = expPool.filter((p) => p && p.photo && matchesExp(p, key)).sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0))[0]; if (match) avail.push({ key, place: match, e }); }
+                const usedHeroIds = new Set();
+                for (const key of THEME_ORDER) { const e = EXPERIENCES[key]; if (!e) continue; const match = expPool.filter((p) => p && p.photo && matchesExp(p, key) && !usedHeroIds.has(p.id)).sort((a, b) => (b.wfScore || 0) - (a.wfScore || 0))[0]; if (match) { avail.push({ key, place: match, e }); usedHeroIds.add(match.id); } }
                 // v6.25: the hero is now the single best move for right now, ranked by
                 // quality + distance + today's weather + the time of day (see lib/ranking.js),
                 // so a stormy afternoon stops opening on an outdoor pick. The themed
@@ -4102,7 +4104,14 @@ function PageInner() {
                   themeBody: "The ten best spots near you for right now, ranked by quality, distance, today's weather, and the time of day. Rain pushes indoor picks up, clear skies favor the outdoors, and anything closed drops down. No ads, no paid placement.",
                 } : null;
                 const restExp = avail.filter((a) => !heroPlace || a.place.id !== heroPlace.id);
-                const mkHook = (a) => { const t = themedHook(a.key, a.place); return { id: "exp-" + a.key, accent: THEME_COLOR[a.key] || C.accent, emoji: a.e.icon, label: a.e.label, theme: a.key, placeId: a.place.id, highlightWord: t.hl, hook: t.hook, subtitle: t.sub, cta: t.cta, themeTitle: a.e.title, themeBody: a.e.lead }; };
+                const mkHook = (a) => {
+                  const t = themedHook(a.key, a.place);
+                  const members = placesForHook({ theme: a.key, placeId: a.place.id }, expPool);
+                  const cnt = members.length;
+                  const avg = Dining.avgCostForTwo(members);
+                  const meta = [cnt > 1 ? cnt + " spots" : null, avg ? avg.text : null].filter(Boolean).join("  ·  ");
+                  return { id: "exp-" + a.key, accent: THEME_COLOR[a.key] || C.accent, emoji: a.e.icon, label: a.e.label, theme: a.key, placeId: a.place.id, highlightWord: t.hl, hook: t.hook, subtitle: t.sub, cta: cnt > 1 ? ("See all " + cnt + " →") : t.cta, metaLine: meta || null, themeTitle: a.e.title, themeBody: a.e.lead };
+                };
                 const dicePhotos = expPool.filter((p) => p && p.photo).slice(0, 4).map((p) => p.photo);
                 return (
                   <div style={{ marginBottom: 16 }}>
