@@ -7,7 +7,7 @@ import * as Trips from "../lib/trips";
 import * as Ranking from "../lib/ranking";
 import * as Dining from "../lib/dining";
 
-const BUILD = "v6.25";
+const BUILD = "v1.1";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -2067,6 +2067,7 @@ function PageInner() {
   const [eventPreview, setEventPreview] = useState(null);
   const [weather, setWeather] = useState(null);
   const [suggested, setSuggested] = useState(null);
+  const [homeTodo, setHomeTodo] = useState(null);
   const [suggestedLoading, setSuggestedLoading] = useState(false);
   const [intent, setIntent] = useState(null);
   const [foryouEvents, setForyouEvents] = useState(null);
@@ -3114,6 +3115,38 @@ function PageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen, center, weather, intent]);
 
+  // v1.1: fetch a small "things to do" set for the home area so the Top 10 things
+  // to do card shows real attractions, not the food feed. Cached ~24h per area,
+  // so it costs roughly one Google search per area per day.
+  useEffect(() => {
+    if (screen !== "suggested" || !center) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const ckey = `wf_todo_${center.lat.toFixed(3)}_${center.lng.toFixed(3)}`;
+        try {
+          const raw = localStorage.getItem(ckey);
+          if (raw) {
+            const obj = JSON.parse(raw);
+            if (obj && obj.ts && Date.now() - obj.ts < 24 * 60 * 60 * 1000 && Array.isArray(obj.places)) {
+              if (!cancelled) setHomeTodo(obj.places);
+              return;
+            }
+          }
+        } catch {}
+        let res = [];
+        try { res = await searchPlaces("attractions", "all", { lat: center.lat, lng: center.lng }, 32000, "all"); } catch {}
+        const arr = Array.isArray(res) ? res : [];
+        try { localStorage.setItem(ckey, JSON.stringify({ ts: Date.now(), places: arr })); } catch {}
+        if (!cancelled) setHomeTodo(arr);
+      } catch {
+        if (!cancelled) setHomeTodo([]);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, center]);
+
   // When the searched location changes, drop the AI hooks built for the previous
   // place so the home cards never keep recommending where you used to be. They
   // fall back to fresh generateHooks() until new AI hooks load for the new spot.
@@ -4078,8 +4111,9 @@ function PageInner() {
                 const condCtx = { weather, hour: new Date().getHours(), isWeekend: [0, 6].includes(new Date().getDay()) };
                 const areaPool = dedupePlaces([...(displayList || []), ...(places || [])].filter(Boolean), true);
                 const cityN = locName ? locName.split(",")[0] : "you";
-                const top10 = Ranking.rankByConditions(areaPool, condCtx).slice(0, 10);
                 const food10 = Ranking.rankByConditions(areaPool.filter((p) => (Ranking.coarseCat(p) || primaryCategory(p)) === "Food"), condCtx).slice(0, 10);
+                const todoPool = dedupePlaces((homeTodo || []).filter((p) => { const c = Ranking.coarseCat(p) || primaryCategory(p); return c !== "Food" && c !== "Nightlife" && c !== "Hotels"; }), true);
+                const todo10 = Ranking.rankByConditions(todoPool, condCtx).slice(0, 10);
                 const row = (p, i, n) => (
                   <div key={p.id} onClick={() => openDetail(p)} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 0", borderBottom: i < n - 1 ? `1px solid ${C.border}` : "none", cursor: "pointer" }}>
                     <div style={{ width: 22, textAlign: "center", fontSize: 13.5, fontWeight: 800, color: i < 3 ? C.accent : C.muted, flexShrink: 0 }}>{i + 1}</div>
@@ -4114,8 +4148,8 @@ function PageInner() {
                   </div>
                 ) : null);
                 return (<>
-                  {card("🧭 Top 10 near " + cityN, "The best spots right now, ranked by quality, distance, weather and time of day.", top10, top10Open, () => setTop10Open((v) => !v))}
-                  {card("🍽️ Top 10 food near " + cityN, "The best places to eat right now, ranked.", food10, food10Open, () => setFood10Open((v) => !v))}
+                  {card("🍽️ Top 10 food near " + cityN, "The best places to eat right now, ranked by quality, distance and time.", food10, food10Open, () => setFood10Open((v) => !v))}
+                  {card("🎯 Top 10 things to do near " + cityN, "The best attractions and activities right now, ranked.", todo10, top10Open, () => setTop10Open((v) => !v))}
                 </>);
               })()}
               {/* "Worth a look near you": Wayfind Picks first, editorial hooks in the middle, Roll the Dice last. Same hook-card shape, different accent colors, so they blend. */}
