@@ -49,11 +49,12 @@ export async function POST(req) {
         (hasReviews ? "loves (array of up to 4 specific things reviewers single out, in concrete terms; empty array if unclear), " : "loves (empty array), ") +
         (hasReviews ? "cautions (array of up to 3 honest, specific things that would change someone's decision, e.g. long weekend waits, cash only, loud, slow service, ONLY if reviewers mention them; empty array if none), " : "cautions (empty array), ") +
         (hasReviews ? "mustTry (a JSON array of up to 3 specific dishes or drinks reviewers repeatedly name, most praised first; empty array if none clearly stand out), " : "mustTry (empty array), ") +
+        (hasReviews ? "pairing (one short phrase on what goes well together if reviews suggest it, e.g. 'the brisket with a cold cider'; empty string if none), " : "pairing (empty string), ") +
         (hasReviews ? "tips (array of up to 4 concrete insider moves a regular would share, like when to arrive, where to sit, what to order, parking, grounded in the reviews; empty array if none), " : "tips (empty array), ") +
         (hasReviews ? "keywords (array of 3 to 5 short lowercase words reviewers most commonly use; empty array if unclear), " : "keywords (empty array), ") +
         "vibe (2 to 4 words that capture the actual atmosphere).";
     } else {
-      maxTokens = 280;
+      maxTokens = 500;
       system =
         voice +
         (hasReviews ? "Base every point on what the real visitor reviews actually say. " : "Using ONLY the facts provided, be specific and concrete. ") +
@@ -62,6 +63,10 @@ export async function POST(req) {
         "verdict (one specific, decision-useful sentence naming the single best reason to go that is particular to THIS place, not generic praise), " +
         "oneWord (exactly ONE word capturing the overall sentiment, e.g. 'Lively', 'Cozy', 'Reliable'), " +
         "bestTime (short specific phrase for when to go if reviews indicate it, e.g. 'Weekday evenings, before 7'; empty string if unclear), " +
+        "bestFor (array of up to 4 short audience or occasion labels this genuinely suits, e.g. 'Families', 'Date night', 'Solo work', grounded in what reviews describe; empty array if unclear), " +
+        "goWhen (short phrase for the best time or use case to go, e.g. 'Before 6 PM', 'Weekday lunch'; empty string if unclear), " +
+        (hasReviews ? "skipIf (one honest tradeoff naming who should skip it or when not to go, e.g. 'you want quiet or upscale food', grounded in reviews; empty string if unclear), " : "skipIf (empty string), ") +
+        (hasReviews ? "whyPicked (one concrete sentence of evidence for why this is a solid pick, drawn from what reviewers emphasize, not generic praise; empty string if unclear), " : "whyPicked (empty string), ") +
         (hasReviews ? "caution (ONE specific honest thing to know or common complaint that would change a decision; empty string if none stands out), " : "caution (empty string), ") +
         (hasReviews ? "tip (ONE concrete insider tip a regular would actually give; empty string if none)." : "tip (empty string).");
     }
