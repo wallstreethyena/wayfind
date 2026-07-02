@@ -1,6 +1,7 @@
 import * as Tags from "../lib/tags.js";
 import * as D from "../lib/dining.js";
 import * as R from "../lib/ranking.js";
+import * as Cats from "../lib/categories.js";
 let pass = 0, fail = 0;
 const ok = (name, cond) => { if (cond) { pass++; console.log("PASS  " + name); } else { fail++; console.log("FAIL  " + name); } };
 const diagon = ["tourist_attraction", "amusement_park", "point_of_interest"];
@@ -64,6 +65,14 @@ if (_ctx) {
   ok("a paid theme park never gets the get-outside line", R.heroReason(_diag, _ctx) !== "Great weather to get outside");
   ok("a paid theme park never gets the beach line", R.heroReason(_diag, _ctx) !== "Prime beach weather right now");
 }
+
+
+// v3.1 discovery-regression fixtures: core categories may never disappear.
+const _ids = new Set(Cats.allIds());
+ok("discovery config has no duplicate ids", _ids.size === Cats.INTENTS.length + Cats.DISCOVER.length);
+const _missing = Cats.REQUIRED.filter((r) => !_ids.has(r));
+ok("all core discovery categories present" + (_missing.length ? " (missing: " + _missing.join(", ") + ")" : ""), _missing.length === 0);
+ok("every category has a valid action", [...Cats.INTENTS, ...Cats.DISCOVER].every((x) => Cats.validAct(x.act)));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

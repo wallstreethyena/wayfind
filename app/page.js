@@ -6,9 +6,10 @@ import MapView from "./components/MapView";
 import * as Trips from "../lib/trips";
 import * as Ranking from "../lib/ranking";
 import * as Tags from "../lib/tags";
+import * as Cats from "../lib/categories";
 import * as Dining from "../lib/dining";
 
-const BUILD = "v3.0";
+const BUILD = "v3.1";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -2085,6 +2086,7 @@ function PageInner() {
   const [screen, setScreen] = useState("suggested");
   const [cat, setCat] = useState("food");
   const [moodOpen, setMoodOpen] = useState(false); // inline "what are you in the mood for" accordion
+  const [moodAll, setMoodAll] = useState(false); // "All categories" second layer inside the mood card
   const [moodPick, setMoodPick] = useState(null);   // last category tapped, drives the orange highlight
   const [browseCat, setBrowseCat] = useState(null); // v6.22: category tapped in the mood menu browses IN PLACE on the home feed. No navigation, the feed updates under the weather and the sub-menu slides down.
   const [sub, setSub] = useState("all");
@@ -4165,26 +4167,26 @@ function PageInner() {
             <div style={isDesktop ? { display: "flex", gap: 28, alignItems: "flex-start", maxWidth: 1000, margin: "0 auto" } : {}}>
               {/* LEFT column on desktop: intent chips + hooks + feed */}
               <div style={{ flex: 1, minWidth: 0, maxWidth: isDesktop ? 600 : undefined }}>
-              {/* v3.0: the mood card IS the menu. One premium selector: collapsed it asks the question (or shows the active intent), expanded it offers the intents, and Food / Things to do reveal their subfilters inside the same panel. No duplicate chip row, no grid, no stacked systems. */}
+              {/* v3.1: two-layer discovery, one controller. The mood card asks the question; expanded it offers the intents (layer 1) and an "All categories" section with the complete discovery set (layer 2) from lib/categories.js. Nothing hardcoded, nothing removed, regression-tested. */}
               {(() => {
                 const pickBrowse = (id) => { const nv = browseCat === id ? null : id; setMoodPick(nv); setBrowseCat(nv); if (nv) { setCat(nv); setSub("all"); setVibe("all"); } };
-                const go = (label, fn, collapse) => { try { logEvent("intent_chip", null, { intent: label }); } catch (e) {} if (collapse) setMoodOpen(false); fn(); };
-                const INTENTS = [
-                  { id: "tonight", l: "Tonight", act: () => go("Tonight", () => setScreen("events"), true) },
-                  { id: "food", l: "Food", cat: "food" },
-                  { id: "todo", l: "Things to do", cat: "attractions" },
-                  { id: "kids", l: "With kids", act: () => go("With kids", () => openExperience("family"), true) },
-                  { id: "date", l: "Date night", act: () => go("Date night", () => openExperience("romantic"), true) },
-                  { id: "rainy", l: "Rainy day", act: () => go("Rainy day", openRainy, false) },
-                  { id: "gems", l: "Hidden gems", act: () => go("Hidden gems", () => openExperience("gem"), true) },
-                  { id: "drive", l: "Worth the drive", act: () => go("Worth the drive", openWorthDrive, false) },
-                ];
+                const run = (item, layer) => {
+                  try { logEvent("intent_chip", null, { intent: item.label, layer }); } catch (e) {}
+                  const a = item.act || {};
+                  if (a.type === "screen") { setMoodOpen(false); setScreen(a.screen); }
+                  else if (a.type === "exp") { setMoodOpen(false); openExperience(a.key); }
+                  else if (a.type === "sheet") { if (a.sheet === "rainy") openRainy(); else if (a.sheet === "drive") openWorthDrive(); else if (a.sheet === "mustdos") openMustDos(); }
+                  else if (a.type === "browse") { pickBrowse(a.cat); }
+                  else if (a.type === "sub") { if (browseCat !== a.cat) pickBrowse(a.cat); setSub(a.sub); }
+                };
+                const isOn = (item) => { const a = item.act || {}; if (a.type === "browse") return browseCat === a.cat; if (a.type === "sub") return browseCat === a.cat && sub === a.sub; return false; };
                 const city = locName ? locName.split(",")[0] : "you";
-                const activeLabel = browseCat === "food" ? "Food" : browseCat === "attractions" ? "Things to do" : null;
+                const CATL = { food: "Food", attractions: "Things to do", nightlife: "Nightlife", beach: "Beach", hotels: "Stays", shopping: "Shopping" };
+                const activeLabel = browseCat ? (CATL[browseCat] || null) : null;
                 const subs = browseCat ? (SUBFILTERS[browseCat] || []) : [];
                 const subPick = browseCat && sub !== "all" ? (subs.find((x) => x.id === sub) || {}).label : null;
                 const title = activeLabel ? activeLabel + " near " + city + (subPick ? " · " + subPick : "") : "What are you in the mood for?";
-                const subtitle = activeLabel ? subs.filter((x) => x.id !== "all").map((x) => x.label).join(", ") : "Tonight, food, things to do, date night, and more";
+                const subtitle = activeLabel ? (subs.filter((x) => x.id !== "all").map((x) => x.label).join(", ") || "Tap to change or clear") : "Tonight, food, nightlife, beaches, and more";
                 return (
                   <div style={{ marginBottom: 16 }}>
                     <button onClick={() => setMoodOpen((v) => !v)} style={{ width: "100%", borderRadius: 18, border: `1.5px solid ${C.accent}`, background: `linear-gradient(150deg, ${C.adim} 0%, ${C.card} 70%)`, color: C.text, cursor: "pointer", display: "flex", alignItems: "center", gap: 14, padding: "13px 16px" }}>
@@ -4198,11 +4200,23 @@ function PageInner() {
                       </div>
                       <span style={{ marginLeft: "auto", color: C.accent, fontSize: 20, transform: moodOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.28s ease", flexShrink: 0 }}>›</span>
                     </button>
-                    <div style={{ overflow: "hidden", maxHeight: moodOpen ? 220 : 0, opacity: moodOpen ? 1 : 0, transition: "max-height 0.32s cubic-bezier(.4,0,.2,1), opacity 0.25s ease" }}>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10, background: C.panel, border: `1px solid ${C.border}`, borderRadius: 16, padding: "12px 12px" }}>
-                        {INTENTS.map((c) => { const on = c.cat ? browseCat === c.cat : false; return (
-                          <button key={c.id} onClick={() => { if (c.cat) { try { logEvent("intent_chip", null, { intent: c.l }); } catch (e) {} pickBrowse(c.cat); } else c.act(); }} style={{ flexShrink: 0, padding: "8px 14px", borderRadius: 999, background: on ? C.adim : C.card, border: `1px solid ${on ? C.accent : C.border}`, color: on ? C.accent : C.text, fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>{c.l}{on ? "  ✕" : ""}</button>
-                        ); })}
+                    <div style={{ overflow: "hidden", maxHeight: moodOpen ? (moodAll ? 680 : 250) : 0, opacity: moodOpen ? 1 : 0, transition: "max-height 0.34s cubic-bezier(.4,0,.2,1), opacity 0.25s ease" }}>
+                      <div style={{ marginTop: 10, background: C.panel, border: `1px solid ${C.border}`, borderRadius: 16, padding: "12px 12px" }}>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {Cats.INTENTS.map((c) => { const on = isOn(c); return (
+                            <button key={c.id} onClick={() => run(c, 1)} style={{ flexShrink: 0, padding: "8px 14px", borderRadius: 999, background: on ? C.adim : C.card, border: `1px solid ${on ? C.accent : C.border}`, color: on ? C.accent : C.text, fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>{c.label}{on ? "  ✕" : ""}</button>
+                          ); })}
+                        </div>
+                        <button onClick={() => setMoodAll((v) => !v)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "transparent", border: "none", color: C.muted, fontSize: 11, fontWeight: 800, letterSpacing: "0.6px", textTransform: "uppercase", cursor: "pointer", padding: "10px 2px 2px" }}>
+                          <span>All categories</span><span style={{ transform: moodAll ? "rotate(90deg)" : "none", transition: "transform .25s", color: C.accent, fontSize: 15 }}>›</span>
+                        </button>
+                        {moodAll && (
+                          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 8 }}>
+                            {Cats.DISCOVER.map((c) => { const on = isOn(c); return (
+                              <button key={c.id} onClick={() => run(c, 2)} style={{ padding: "6px 12px", borderRadius: 999, background: on ? C.adim : "transparent", border: `1px solid ${on ? C.accent : C.border}`, color: on ? C.accent : C.light, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>{c.label}{on ? "  ✕" : ""}</button>
+                            ); })}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div style={{ overflow: "hidden", maxHeight: (moodOpen && subs.length > 1) ? 120 : 0, opacity: (moodOpen && subs.length > 1) ? 1 : 0, transition: "max-height 0.30s cubic-bezier(.4,0,.2,1), opacity 0.24s ease" }}>

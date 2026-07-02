@@ -4,6 +4,23 @@ Versioning starts at 1.0. Each shipped build gets the next number (1.1, 1.2, ...
 The running app shows the version in the footer ("Wayfind v1.0") so you can confirm
 which build is live on Vercel. This file is the record so nothing gets lost.
 
+## v3.1 - full discovery restored, two-layer, regression-locked
+- The categories removed from home in v2.6 (Nightlife, Beach, Stays, Shopping)
+  are back, plus the full second layer the advisor specified: Breakfast,
+  Brunch (new subfilter), Coffee, Dinner, Dessert, Drinks, Cheap eats,
+  Nightlife, Clubs, Live music, Beach, Outdoors, Museums, Tours, Tourist
+  must-dos, Shopping, Stays, Events, Family-friendly, Romantic.
+- Two-layer model inside the one mood card: expanded it shows the eight
+  intents, then an "All categories" toggle revealing the complete set. No chip
+  row, no grid, no stacked systems; premium top, complete discovery.
+- Nothing hardcoded: lib/categories.js is the single source of truth with
+  declarative actions (browse, subfilter, experience, sheet, screen) run by
+  one dispatcher, ready to be reused by Map/Events/other surfaces.
+- Regression protection: fixtures now assert every core category id exists in
+  the config with a valid action. A redesign that drops one fails the build.
+- Analytics: every tap logs intent_chip with layer 1 or 2, so the data will
+  show which layer carries discovery.
+
 ## v3.0 - the mood card is the menu (v2.6 overcorrection fixed)
 - v2.6 consolidated by deletion; the intent was consolidation by promotion.
   The "What are you in the mood for?" card is back as the single premium
