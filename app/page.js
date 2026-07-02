@@ -1539,6 +1539,39 @@ function betterAlternatives(current, pool, n) {
   out.sort((a, b) => b.edge - a.edge);
   return out.slice(0, n || 3);
 }
+// v6.25: "More like this" — rank loaded places by how much they share the
+// subject's experience: same broad category, overlapping experience tags,
+// matching cuisine, similar price and venue feel. A traits-based proxy for
+// "same vibe" using data already on hand (no extra API calls). The deep,
+// review-reading, search-everywhere version is a separate grounded pipeline.
+function similarPlaces(pool, seed, n, badgesOf) {
+  if (!seed) return [];
+  const sBadges = badgesOf ? badgesOf(seed) : new Set();
+  const sCat = primaryCategory(seed);
+  const sCuisine = Dining.cuisineLabel(seed);
+  const sPrice = seed.priceNum;
+  let sLean = null; try { sLean = Ranking.venueLean(seed); } catch (e) {}
+  const scored = [];
+  for (const c of (pool || [])) {
+    if (!c || c.id === seed.id) continue;
+    if (primaryCategory(c) !== sCat) continue;
+    const cBadges = badgesOf ? badgesOf(c) : new Set();
+    let shared = 0; sBadges.forEach((k) => { if (cBadges.has(k)) shared++; });
+    const cCuisine = Dining.cuisineLabel(c);
+    const cuisineMatch = !!(sCuisine && cCuisine === sCuisine);
+    if (shared === 0 && !cuisineMatch) continue;
+    let score = shared * 3;
+    if (cuisineMatch) score += 2.5;
+    if (sPrice != null && c.priceNum != null && Math.abs(c.priceNum - sPrice) <= 1) score += 1;
+    let cLean = null; try { cLean = Ranking.venueLean(c); } catch (e) {}
+    if (sLean && cLean === sLean) score += 1;
+    score += Math.min(1.5, (c.wfScore || 0) / 100);
+    scored.push({ p: c, score });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, n).map((x) => x.p);
+}
+
 function relatedPicks(allSrc, subject, n) {
   if (!subject) return [];
   const subCat = primaryCategory(subject) || "";
@@ -5295,6 +5328,36 @@ function PageInner() {
 
 
               {/* Hours now expand from the Open/Closed status badge near the title. */}
+
+              {/* v6.25: "More like this" — similar experience among loaded places, matched on shared traits. */}
+              {!detail._event && (() => {
+                const simPool = dedupePlaces([...(suggested || []), ...places]);
+                const badgesOf = (x) => { try { return new Set(experienceBadges(x, null, 99).map((b) => b.key)); } catch (er) { return new Set(); } };
+                const sim = similarPlaces(simPool, detail, 4, badgesOf);
+                if (sim.length === 0) return null;
+                return (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: C.text, marginBottom: 3 }}>More like {detail.name}</div>
+                    <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.45, marginBottom: 10 }}>Spots nearby with a similar vibe and crowd, matched on what this place is known for.</div>
+                    {sim.map((p) => (
+                      <div key={"sim-" + p.id} onClick={() => openDetail(p)} style={{ display: "flex", gap: 11, alignItems: "center", background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 10, marginBottom: 8, cursor: "pointer" }}>
+                        <FallbackImg src={p.photo} icon="📍" style={{ width: 58, height: 58, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: 14.5, fontWeight: 800, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginTop: 2 }}>
+                            {(() => { const cz = Dining.cuisineLabel(p); return cz ? <span style={{ fontSize: 11.5, fontWeight: 700, color: C.light }}>{cz}</span> : null; })()}
+                            {p.rating != null && <span style={{ fontSize: 12, color: "#F59E0B" }}>★ {p.rating}</span>}
+                            {p.openNow === true && <span style={{ fontSize: 11.5, fontWeight: 700, color: C.green }}>· Open</span>}
+                            {p.openNow === false && <span style={{ fontSize: 11.5, fontWeight: 700, color: C.red }}>· Closed</span>}
+                            {p.distMi != null && <span style={{ fontSize: 11.5, color: C.muted }}>· {p.distMi.toFixed(1)} mi</span>}
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 18, color: C.muted, flexShrink: 0 }}>›</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
 
               {(() => {
                 const altPool = dedupePlaces([...(suggested || []), ...places]);
