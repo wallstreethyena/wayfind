@@ -1,5 +1,6 @@
 import * as Tags from "../lib/tags.js";
 import * as D from "../lib/dining.js";
+import * as R from "../lib/ranking.js";
 let pass = 0, fail = 0;
 const ok = (name, cond) => { if (cond) { pass++; console.log("PASS  " + name); } else { fail++; console.log("FAIL  " + name); } };
 const diagon = ["tourist_attraction", "amusement_park", "point_of_interest"];
@@ -46,5 +47,23 @@ ok("Attraction label", Tags.sectionLabel(Tags.resolveIdentity(diagon)) === "Don'
 ok("Park label", Tags.sectionLabel("park") === "What to see");
 // 10 missing price still honest
 ok("Missing price says not listed", D.costForTwo({ types: ["restaurant"] }).text === "Price not listed");
+
+// v2.3 surface-consistency fixtures (cuisine identity + hero copy)
+ok("Bocas-style noisy cafe token is not Café", D.cuisineLabel({ name: "Bocas Grill Orlando", types: ["restaurant", "bar", "cafe", "food"] }) === null);
+ok("Real cuisine beats noisy cafe token", D.cuisineLabel({ name: "Bocas Grill Orlando", types: ["seafood_restaurant", "cafe", "restaurant"] }) === "Seafood");
+ok("True coffee shop keeps its label", !!D.cuisineLabel({ name: "Seek First Coffee Shop", types: ["cafe", "food"] }));
+ok("Named cafe with restaurant token keeps its label", !!D.cuisineLabel({ name: "Moma's Cafe", types: ["cafe", "restaurant", "food"] }));
+const _park = { name: "Leu Gardens", types: ["park", "botanical_garden"] };
+const _diag = { name: "Diagon Alley", types: ["tourist_attraction", "amusement_park"] };
+let _ctx = null;
+for (const w of [{ temp: 74, rain: 5 }, { temp: 72, rain: 0, wet: false }, { temp: 78, rain: 10 }]) {
+  if (R.heroReason(_park, { weather: w, hour: 13 }) === "Great weather to get outside") { _ctx = { weather: w, hour: 13 }; break; }
+}
+ok("a real park earns the get-outside hero line", !!_ctx);
+if (_ctx) {
+  ok("a paid theme park never gets the get-outside line", R.heroReason(_diag, _ctx) !== "Great weather to get outside");
+  ok("a paid theme park never gets the beach line", R.heroReason(_diag, _ctx) !== "Prime beach weather right now");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -8,7 +8,7 @@ import * as Ranking from "../lib/ranking";
 import * as Tags from "../lib/tags";
 import * as Dining from "../lib/dining";
 
-const BUILD = "v2.1";
+const BUILD = "v2.5";
 const C = {
   bg: "#0D1117", panel: "#161B22", card: "#1C2230", border: "#2D3748",
   accent: "#F97316", adim: "rgba(249,115,22,.15)", blue: "#38BDF8", green: "#22C55E",
@@ -1171,10 +1171,47 @@ function eventCategory(e) {
   if (has(/\b(run|race|5k|10k|marathon|sport|tournament|yoga|fitness|cycling|golf)\b/)) return { icon: "🏃", short: "Active", color: "#38BDF8" };
   return seg;
 }
-function EventHeroBg({ image, acc }) {
+function EventHeroBg({ image, acc, venue, near }) {
+  // v2.4: an event with no usable image borrows its venue's own Google photo
+  // (one findPlace call per unique venue, cached 7 days on-device). The clean
+  // gradient is the last resort, not the default.
   const [bad, setBad] = useState(false);
-  if (image && !bad) {
-    return <img src={image} alt="" draggable={false} onError={() => setBad(true)} onLoad={(ev) => { try { const w = ev.target && ev.target.naturalWidth; if (w && w < 640) setBad(true); } catch {} }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />;
+  const [alt, setAlt] = useState(null); // null = not tried, "" = tried and none, url = venue photo
+  const [altBy, setAltBy] = useState("");
+  useEffect(() => {
+    if (image && !bad) return;
+    if (!venue || alt !== null) return;
+    let off = false;
+    const key = "wf_evimg_" + String(venue).toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 60);
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) { const o = JSON.parse(raw); if (o && o.ts && Date.now() - o.ts < 7 * 24 * 3600 * 1000) { setAlt(o.url || ""); setAltBy(o.by || ""); return; } }
+    } catch (e) {}
+    // Budget guardrail: at most 12 venue-photo lookups per device per day. Past
+    // the cap we cache "none" and fall back to the gradient instead of spending.
+    try {
+      const bk = "wf_evimg_budget_" + new Date().toISOString().slice(0, 10);
+      const n = parseInt(localStorage.getItem(bk) || "0", 10) || 0;
+      if (n >= 12) { try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), url: "", by: "" })); } catch (e) {} setAlt(""); return; }
+      localStorage.setItem(bk, String(n + 1));
+    } catch (e) {}
+    (async () => {
+      let url = "", by = "";
+      try { const pl = await findPlace(venue, near); url = (pl && pl.photo) || ""; by = (pl && pl.photoAttr) || ""; } catch (e) {}
+      try { logEventAnon("venue_photo_lookup", null, { venue: String(venue).slice(0, 60), hit: !!url }); } catch (e) {}
+      try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), url, by })); } catch (e) {}
+      if (!off) { setAlt(url); setAltBy(by); }
+    })();
+    return () => { off = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [image, bad, venue]);
+  const usingAlt = !(image && !bad) && !!alt;
+  const src = image && !bad ? image : (alt || "");
+  if (src) {
+    return (<>
+      <img src={src} alt="" draggable={false} onError={() => { if (image && !bad) setBad(true); else setAlt(""); }} onLoad={(ev) => { try { if (image && !bad) { const w = ev.target && ev.target.naturalWidth; if (w && w < 640) setBad(true); } } catch (e) {} }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+      {usingAlt && <div style={{ position: "absolute", bottom: 6, right: 8, fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,.85)", background: "rgba(0,0,0,.5)", padding: "2px 7px", borderRadius: 999, pointerEvents: "none" }}>{altBy ? "Photo: " + altBy + " · Google" : "via Google"}</div>}
+    </>);
   }
   return <div style={{ position: "absolute", inset: 0, background: `linear-gradient(135deg, ${acc}55 0%, #0D1117 100%)` }} />;
 }
@@ -2412,7 +2449,7 @@ function PageInner() {
       if (pick) { diceRouteRef.current = true; setSurprisePool(pool); setSurprisePick(pick); setScreen("surprise"); try { window.scrollTo(0, 0); } catch {} }
     }, 1000);
   }
-  function rollDice() { setDiceChoose(true); }
+  function rollDice() { try { logEvent("dice", null); } catch (e) {} setDiceChoose(true); }
   // In-place dice roll for the home Pick-for-me panel. Spins, lands on a random
   // spot from the current feed, and pushes it onto a session roll history the
   // user can scroll back through. Does not navigate away.
@@ -2681,6 +2718,7 @@ function PageInner() {
 
   // Open a place: pull deep data (cached), then run the AI grounded in it.
   async function openDetail(p, context) {
+    try { const _aud = {}; experienceBadges(p, null, 99, _aud); logEvent("detail_open", p, { identity: _aud.identity || null, blocked: (_aud.blocked || []).length, ctx: typeof context === "string" ? context : null }); } catch (e) {}
     setDetail(p);
     setDetailContext(context || null);
     recordSignal(p, "open"); // implicit engagement signal
@@ -2844,7 +2882,7 @@ function PageInner() {
         body: JSON.stringify({
           name: p.name, type: p.type, city: locName,
           rating: p.rating, reviewCount: p.reviews, price: p.price, openNow: p.openNow,
-          category: cat, sub, mode: "compact", kind: (["Food", "Nightlife"].includes(primaryCategory(p) || "") ? "dining" : "attraction"),
+          category: cat, sub, mode: "compact", kind: (p._event ? "event" : (["Food", "Nightlife"].includes(primaryCategory(p) || "") ? "dining" : "attraction")),
           editorial: extra ? extra.editorial : null,
           reviews: extra && extra.reviews ? extra.reviews.map((r) => r.text).slice(0, 5) : [],
           attributes: p.labels || [],
@@ -2875,7 +2913,7 @@ function PageInner() {
         body: JSON.stringify({
           name: p.name, type: p.type, city: locName,
           rating: p.rating, reviewCount: p.reviews, price: p.price, openNow: p.openNow,
-          category: cat, sub, mode: "full", kind: (["Food", "Nightlife"].includes(primaryCategory(p) || "") ? "dining" : "attraction"),
+          category: cat, sub, mode: "full", kind: (p._event ? "event" : (["Food", "Nightlife"].includes(primaryCategory(p) || "") ? "dining" : "attraction")),
           editorial: extra ? extra.editorial : null,
           reviews: extra && extra.reviews ? extra.reviews.map((r) => r.text).slice(0, 5) : [],
           attributes: p.labels || [],
@@ -3443,6 +3481,7 @@ function PageInner() {
   }
 
   async function submitSearch() {
+    try { logEvent("search", null, { q: String(query || "").slice(0, 80) }); } catch (e) {}
     const q = query.trim();
     if (!q) { openSurprise(); return; }
     setSuggestions([]);
@@ -3678,7 +3717,7 @@ function PageInner() {
               <div style={{ fontSize: 12.5, color: C.muted }}>
                 {view.length} result{view.length === 1 ? "" : "s"} ·{" "}
                 <span style={{ color: C.accent, fontWeight: 700 }}>
-                  {sortBy === "near" ? "closest first" : "ranked best first"}
+                  {sortBy === "near" ? "nearest first" : "ranked by fit"}
                 </span>
               </div>
               {searchLabel && (
@@ -3995,7 +4034,7 @@ function PageInner() {
                       <button onClick={() => setMapDrawer((o) => !o)} aria-label={mapDrawer ? "Collapse list" : "Expand list"} style={{ flexShrink: 0, width: "100%", background: "transparent", border: "none", cursor: "pointer", padding: 0, display: "flex", flexDirection: "column", alignItems: "center" }}>
                         <div style={{ width: 36, height: 4, background: C.border, borderRadius: 2, margin: "7px auto 5px" }} />
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, paddingBottom: 8 }}>
-                          <span style={{ fontSize: 13, fontWeight: 800, color: C.text }}>{view.length} place{view.length === 1 ? "" : "s"} {sortBy === "near" ? "closest first" : "best first"}</span>
+                          <span style={{ fontSize: 13, fontWeight: 800, color: C.text }}>{view.length} place{view.length === 1 ? "" : "s"} {sortBy === "near" ? "nearest first" : "ranked by fit"}</span>
                           <span style={{ fontSize: 12, color: C.accent, fontWeight: 800 }}>{mapDrawer ? "▾" : "▴"}</span>
                         </div>
                       </button>
@@ -4138,7 +4177,7 @@ function PageInner() {
                     { l: "Must-dos", a: openMustDos },
                     { l: "Open now", a: openOpenNow },
                   ].map((c) => (
-                    <button key={c.l} onClick={c.a} style={{ flexShrink: 0, padding: "8px 14px", borderRadius: 999, background: C.card, border: `1px solid ${C.border}`, color: C.text, fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>{c.l}</button>
+                    <button key={c.l} onClick={() => { try { logEvent("intent_chip", null, { intent: c.l }); } catch (e) {} c.a(); }} style={{ flexShrink: 0, padding: "8px 14px", borderRadius: 999, background: C.card, border: `1px solid ${C.border}`, color: C.text, fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>{c.l}</button>
                   ))}
                 </div>
               )}
@@ -4241,6 +4280,7 @@ function PageInner() {
                   hook: Ranking.heroReason(heroPlace, condCtx),
                   subtitle: "The best move near " + cityHero + " right now, ranked",
                   cta: "See the top 10 →",
+                  metaLine: Tags.requiresParkAdmission(heroPlace.types) ? "May require park admission" : null,
                   themeTitle: "Wayfind Picks · Top 10 near " + cityHero,
                   themeBody: "The ten best spots near you for right now, ranked by quality, distance, today's weather, and the time of day. Rain pushes indoor picks up, clear skies favor the outdoors, and anything closed drops down. No ads, no paid placement.",
                 } : null;
@@ -4318,6 +4358,17 @@ function PageInner() {
                   {card("Best things to do today", "Ranked by what is worth your time: quality, distance, weather and time of day.", todo10, top10Open, () => setTop10Open((v) => !v))}
                 </>);
               })()}
+              {!browseCat && !isDesktop && Array.isArray(foryouEvents) && foryouEvents.length === 0 && (
+                <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: "14px 15px", marginBottom: 16 }}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: C.text, marginBottom: 4 }}>Happening near you</div>
+                  <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.45, marginBottom: 10 }}>Nothing strong tonight nearby. Try one of these instead.</div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button onClick={() => { try { logEvent("intent_chip", null, { intent: "Date night", src: "events_empty" }); } catch (e) {} openExperience("romantic"); }} style={{ padding: "8px 14px", borderRadius: 999, background: C.adim, border: `1px solid ${C.accent}`, color: C.accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Date night</button>
+                    <button onClick={() => { try { logEvent("intent_chip", null, { intent: "Rainy day", src: "events_empty" }); } catch (e) {} openRainy(); }} style={{ padding: "8px 14px", borderRadius: 999, background: C.card, border: `1px solid ${C.border}`, color: C.text, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Rainy day</button>
+                    <button onClick={() => { try { logEvent("intent_chip", null, { intent: "Hidden gems", src: "events_empty" }); } catch (e) {} openExperience("gem"); }} style={{ padding: "8px 14px", borderRadius: 999, background: C.card, border: `1px solid ${C.border}`, color: C.text, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Hidden gems</button>
+                  </div>
+                </div>
+              )}
               {!browseCat && !isDesktop && foryouEvents && foryouEvents.length > 0 && (() => {
                 const evs = dedupeEvents(foryouEvents, true);
                 const relLabel = (e) => { if (!e || !e.date) return null; const ed = new Date(e.date + "T00:00:00"); const t0 = new Date(); t0.setHours(0, 0, 0, 0); const diff = Math.round((ed - t0) / 86400000); if (diff <= 0) return "Tonight"; if (diff === 1) return "Tomorrow"; if (diff >= 0 && diff <= 6 && (ed.getDay() === 6 || ed.getDay() === 0)) return "This weekend"; return null; };
@@ -4336,8 +4387,8 @@ function PageInner() {
                       const rel = relLabel(featured);
                       const acc = C.purple;
                       return (
-                        <div onClick={() => openVenue(featured)} style={{ position: "relative", height: 145, borderRadius: 18, overflow: "hidden", marginBottom: 10, cursor: "pointer", boxShadow: "0 4px 20px rgba(0,0,0,.4)" }}>
-                          <EventHeroBg image={featured.image} acc={acc} />
+                        <div onClick={() => openVenue(featured)} style={{ position: "relative", height: 176, borderRadius: 18, overflow: "hidden", marginBottom: 10, cursor: "pointer", boxShadow: "0 4px 20px rgba(0,0,0,.4)" }}>
+                          <EventHeroBg image={featured.image} acc={acc} venue={cleanVenueName(featured.venue) || featured.venue} near={center} />
                           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,.12) 0%, rgba(0,0,0,.5) 45%, rgba(0,0,0,.9) 100%)" }} />
                           <div style={{ position: "absolute", bottom: 0, right: 0, width: 140, height: 140, background: `radial-gradient(circle at bottom right, ${acc}30 0%, transparent 65%)`, pointerEvents: "none" }} />
                           <div style={{ position: "absolute", top: 12, left: 12, right: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -4349,7 +4400,7 @@ function PageInner() {
                           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "12px 14px 14px" }}>
                             <div style={{ fontSize: 18, fontWeight: 800, color: "#fff", lineHeight: 1.18, marginBottom: 4, textShadow: "0 1px 6px rgba(0,0,0,.7)", letterSpacing: "-0.3px", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{featured.name}</div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.92)", marginBottom: 11, textShadow: "0 1px 4px rgba(0,0,0,.7)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>📍 {cleanVenueName(featured.venue) || featured.city || "Nearby"}{featured.price ? " · " + featured.price : ""}</div>
-                            <div onClick={(e2) => { e2.stopPropagation(); if (featured.url) window.open(ticketUrl(featured.url), "_blank", "noopener"); else openVenue(featured); }} style={{ display: "inline-flex", alignItems: "center", fontSize: 12.5, fontWeight: 800, color: "#fff", background: acc, borderRadius: 999, padding: "7px 16px", cursor: "pointer" }}>{featured.url ? "Get tickets →" : "See event →"}</div>
+                            <div onClick={(e2) => { e2.stopPropagation(); if (featured.url) (logEvent("ticket", null, { src: "cta" }), window.open(ticketUrl(featured.url), "_blank", "noopener")); else openVenue(featured); }} style={{ display: "inline-flex", alignItems: "center", fontSize: 12.5, fontWeight: 800, color: "#fff", background: acc, borderRadius: 999, padding: "7px 16px", cursor: "pointer" }}>{featured.url ? "Get tickets →" : "See event →"}</div>
                           </div>
                         </div>
                       );
@@ -5130,7 +5181,7 @@ function PageInner() {
                   return (<>
                     <span style={{ color: C.border }}>·</span>
                     <span style={{ fontWeight: 800, color: diff != null && diff < 0 ? C.muted : C.accent }}>{label}</span>
-                    {detail.openNow != null && (<span onClick={() => setHoursOpen((o) => !o)} style={{ cursor: "pointer", fontWeight: 600, fontSize: 11.5, color: C.muted }}>Venue {detail.openNow ? "open" : "closed"}</span>)}
+                    {detail.openNow != null && (<span onClick={() => setHoursOpen((o) => !o)} style={{ cursor: "pointer", fontWeight: 600, fontSize: 11.5, color: C.muted }}>Venue hours</span>)}
                   </>);
                 })() : (detail.openNow != null && (<>
                   <span style={{ color: C.border }}>·</span>
@@ -5157,8 +5208,13 @@ function PageInner() {
               })()}
               {/* Primary actions, one global order: Directions leads, Save is secondary. Open state already shows in the status row. */}
               <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-                <a href={detail.mapsUrl} target="_blank" rel="noreferrer" style={{ flex: 1, padding: "12px 0", background: C.accent, borderRadius: 12, color: "#0D1117", fontSize: 14.5, fontWeight: 800, textDecoration: "none", textAlign: "center" }}>Directions ↗</a>
+                {detail._event && detail._event.url ? (<>
+                  <a href={ticketUrl(detail._event.url)} target="_blank" rel="noreferrer" onClick={() => { try { logEvent("ticket", null, { src: "detail_primary" }); } catch (e) {} }} style={{ flex: 1, padding: "12px 0", background: C.accent, borderRadius: 12, color: "#0D1117", fontSize: 14.5, fontWeight: 800, textDecoration: "none", textAlign: "center" }}>Get tickets ↗</a>
+                  <a href={detail.mapsUrl} target="_blank" rel="noreferrer" onClick={() => { try { logEvent("directions", detail); } catch (e) {} }} style={{ flex: 1, padding: "12px 0", background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 14.5, fontWeight: 700, textDecoration: "none", textAlign: "center" }}>Directions ↗</a>
+                </>) : (<>
+                <a href={detail.mapsUrl} target="_blank" rel="noreferrer" onClick={() => { try { logEvent("directions", detail); } catch (e) {} }} style={{ flex: 1, padding: "12px 0", background: C.accent, borderRadius: 12, color: "#0D1117", fontSize: 14.5, fontWeight: 800, textDecoration: "none", textAlign: "center" }}>Directions ↗</a>
                 <button onClick={() => quickSaveFavorite(detail)} style={{ flex: 1, padding: "12px 0", background: C.card, border: `1px solid ${isSaved(detail.id) ? C.accent : C.border}`, borderRadius: 12, color: isSaved(detail.id) ? C.accent : C.text, fontSize: 14.5, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}><svg width="15" height="15" viewBox="0 0 24 24" fill={isSaved(detail.id) ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20 C12 20 4 14.6 4 9.2 C4 6.4 6.1 4.3 8.6 4.3 C10.3 4.3 11.5 5.4 12 6.5 C12.5 5.4 13.7 4.3 15.4 4.3 C17.9 4.3 20 6.4 20 9.2 C20 14.6 12 20 12 20 Z" /></svg>{isSaved(detail.id) ? "Saved ✓" : "Save"}</button>
+                </>)}
                 <button onClick={() => { logEvent("share", detail, { kind: "place" }); addShared(detail); shareLink(detail.name, placeShareUrl(detail, locName), () => showToast("Link copied"), `Want to go to ${detail.name} together? Found it on Wayfind`); }} aria-label="Share" style={{ flexShrink: 0, width: 46, padding: "12px 0", background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12" /><path d="M8 7l4-4 4 4" /><path d="M6 12v7a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-7" /></svg></button>
               </div>
               {!detail._event && (
@@ -5316,7 +5372,7 @@ function PageInner() {
 
               {/* Viator experiences: shown only for activity-type places Viator actually sells (attractions, museums, nature, scenic, etc.), never restaurants, bars, or hotels. This is an affiliate link, disclosed in Terms; it is tracked once a Partner ID is set in AFFIL and works untracked until then. */}
               {!detail._event && ["museum", "wildlife", "entertainment", "scenic", "beach", "nature", "landmark", "waterfront"].includes(placeKind(detail)) && (
-                <a href={viatorSearchUrl(detail.name + " " + (locName ? locName.split(",")[0] : ""))} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: "12px 14px", marginBottom: 14 }}>
+                <a onClick={() => { try { logEvent("tour", detail); } catch (e) {} }} href={viatorSearchUrl(detail.name + " " + (locName ? locName.split(",")[0] : ""))} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: "12px 14px", marginBottom: 14 }}>
                   <span style={{ fontSize: 18 }}>🎟️</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 800, color: C.text }}>Find tours & experiences</div>
@@ -5853,7 +5909,10 @@ function PageInner() {
         <div onClick={() => setLightbox(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.92)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
           <img src={lightbox} alt="" onClick={() => setLightbox(null)} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8 }} />
           <button onClick={() => setLightbox(null)} aria-label="Close" style={{ position: "absolute", top: "max(16px, calc(env(safe-area-inset-top) + 10px))", right: 16, width: 44, height: 44, borderRadius: "50%", border: "1px solid rgba(255,255,255,.3)", background: "rgba(0,0,0,.55)", color: "#fff", fontSize: 20, cursor: "pointer", zIndex: 2 }}>✕</button>
-          <div style={{ position: "absolute", bottom: "max(20px, calc(env(safe-area-inset-bottom) + 12px))", left: 0, right: 0, textAlign: "center", color: "rgba(255,255,255,.7)", fontSize: 12, pointerEvents: "none" }}>Tap anywhere to close</div>
+          <div style={{ position: "absolute", bottom: "max(20px, calc(env(safe-area-inset-bottom) + 12px))", left: 0, right: 0, textAlign: "center", pointerEvents: "none" }}>
+            {(() => { const i = detail && Array.isArray(detail.photos) ? detail.photos.indexOf(lightbox) : -1; const by = i >= 0 && detail && Array.isArray(detail.photoAttrs) ? (detail.photoAttrs[i] || "") : ""; return <div style={{ color: "rgba(255,255,255,.85)", fontSize: 11.5, fontWeight: 600, marginBottom: 3 }}>{by ? "Photo: " + by + " · via Google" : "Photo via Google"}</div>; })()}
+            <div style={{ color: "rgba(255,255,255,.6)", fontSize: 12 }}>Tap anywhere to close</div>
+          </div>
         </div>
       )}
 

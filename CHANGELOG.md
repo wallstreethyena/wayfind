@@ -4,6 +4,68 @@ Versioning starts at 1.0. Each shipped build gets the next number (1.1, 1.2, ...
 The running app shows the version in the footer ("Wayfind v1.0") so you can confirm
 which build is live on Vercel. This file is the record so nothing gets lost.
 
+## v2.5 - photo compliance + cost guardrail
+- Photo author attributions are now captured from Google (normalize keeps
+  photoAttrs/photoAttr) and displayed on large-photo surfaces: a caption in the
+  detail lightbox and a small badge on the event hero when a venue photo is
+  used. Feed thumbnails documented as the remaining gap (docs/GOOGLE_POLICY.md).
+- Budget guardrail on venue-photo lookups: max 12 per device per day, cached
+  "none" past the cap, and every real lookup logs venue_photo_lookup (with hit
+  flag) to the analytics table so cost is visible.
+- docs/GOOGLE_POLICY.md records the storage posture: place IDs indefinitely,
+  photo URL references (never bytes) for 7 days, no server-side Google content,
+  all within Places API (New) temporary caching allowances. Verify wording
+  against live policy pages before any audit response.
+
+## v2.4 - event hero: real image, correct size
+- The featured "Happening near you" hero now borrows the venue's own Google
+  photo when the event has no usable image (one findPlace call per unique
+  venue, cached 7 days on-device). Gradient is the last resort, not the look.
+  This closes the long-deferred venue-photo item; repeated requests = cost
+  approved.
+- Hero height restored to 176 so a two-line title, venue line and CTA no longer
+  collide with the TONIGHT pill.
+
+## v2.3 - surface consistency (from the v1.8-screenshot review)
+- Context: the review graded a stale v1.8 deploy; four of its seven issues were
+  already fixed in v1.9-v2.2 (Picks-page tags, detail header dead space, Save as
+  primary, event chip). Two were real in current code and are fixed here.
+- cuisineLabel identity rule (lib/dining): real *_restaurant cuisines always
+  win, and cafe/bakery/dessert labels apply only when that is plausibly the
+  identity (name, leading types, or no restaurant/bar identity). Bocas can
+  never read as "Café" on any surface; true cafes keep their label. This was
+  the one genuine cross-surface identity gap the v2.0 gate did not cover.
+- heroReason (lib/ranking): paid theme/water parks are never framed as
+  "Great weather to get outside" or beach moves; the hero also carries a
+  "May require park admission" pill when its pick is a paid park.
+- Event details: when the event has a ticket URL, Get tickets is the primary
+  CTA with Directions secondary; the venue-hours toggle now reads neutral
+  "Venue hours" instead of "Venue closed"; the AI receives an event context so
+  tips help someone attending (arrival, parking) and never warn that the venue
+  is "currently closed."
+- Map/list sort labels use Wayfind language: "ranked by fit" / "nearest first".
+- Fixtures extended to 27 (cuisine identity + hero copy) and still gate every
+  deploy via prebuild. Deferred with reason: map pin clustering (MapView needs
+  runtime testing; a dedicated map pass).
+
+## v2.2 - instrumentation, CI gate, empty states
+- Analytics completed across the funnel (Supabase "events" table, fails soft,
+  anonymous device id): intent_chip taps (incl. empty-state fallbacks),
+  detail_open with resolved identity and blocked-tag count, directions, ticket
+  taps, tour taps, dice, and search, joining the existing save, like, dislike,
+  share, share_open, offer_impression, events_none and places_none events.
+- CI deploy gate with zero infrastructure: "prebuild" runs
+  scripts/test-tags.mjs before every next build, so Vercel deploys fail if any
+  trust fixture regresses. Trust bugs now block shipping.
+- Events empty state: when tonight has nothing, the section says so and offers
+  Date night, Rainy day and Hidden gems instead of leaving dead air.
+- docs/COVERAGE.md: the weekly Orlando coverage ritual with a decision rule, so
+  adapters are only built for repeated meaningful misses.
+- Already covered, no build needed: subtle trust cues (v2.0) and the composed
+  "why this pick" (hero heroWhy + grounded whyPicked on detail).
+- Sequencing confirmed: no Supabase inventory work until v2.1/v2.2 metrics show
+  which intents carry the product.
+
 ## v2.1 - intent-first homepage
 - Intent chips now sit at the top of the home feed: Tonight, With kids, Date
   night, Rainy day, Cheap eats, Hidden gems, Must-dos, Open now. Each opens an

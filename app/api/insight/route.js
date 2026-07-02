@@ -10,11 +10,12 @@ export async function POST(req) {
     const key = process.env.ANTHROPIC_API_KEY;
     if (!key) return Response.json({ unavailable: true }, { status: 200 });
     const mode = p.mode === "full" ? "full" : "compact";
-    const kind = p.kind === "attraction" ? "attraction" : "dining";
-    const mustTryDesc = kind === "dining" ? "specific dishes or drinks reviewers repeatedly name" : "specific things reviewers say not to miss (rides, areas, shows, or signature items)";
+    const kind = p.kind === "event" ? "event" : p.kind === "attraction" ? "attraction" : "dining";
+    const mustTryDesc = kind === "dining" ? "specific dishes or drinks reviewers repeatedly name" : kind === "event" ? "things reviewers say help when attending an event here (arrival timing, parking, nearby stops)" : "specific things reviewers say not to miss (rides, areas, shows, or signature items)";
 
     const facts = [
       `Name: ${p.name}`,
+      ...(kind === "event" ? ["Context: the user is viewing this venue for an UPCOMING EVENT. Never mention the venue being currently closed or its regular hours; frame the tip and any caution for someone attending the event (arrival, parking, what to know)."] : []),
       `Type: ${p.type || "unknown"}`,
       `Area: ${p.city || "unknown"}`,
       `Rating: ${p.rating || "n/a"} from ${p.reviewCount || 0} reviews`,
